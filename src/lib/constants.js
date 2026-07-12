@@ -62,10 +62,6 @@ export const SLOT_LABELS = {
   belt: 'Belt', accessory: 'Accessory',
 }
 
-export const DEFAULT_FIT_NOTES = `Height 4'5" — osteogenesis imperfecta; skeleton is non-typical in places. I use a mobility scooter much of the day and also walk.
-
-Standing fit guidance:
-• Trouser hems rise 1–2 inches when seated — check the hem seated as well as standing.
-• Shorter jacket lengths keep lines clean when seated; long coats catch on the scooter.
-• Soft shoulders and fabrics with stretch are more comfortable and easier to dress in.
-• Off-the-rack rarely fits — note per-garment tailoring in each item's fit notes.`
+// The real fit profile is created server-side when the account is made;
+// this fallback only appears if that somehow didn't run.
+export const DEFAULT_FIT_NOTES = `Add your measurements and any fit guidance here — the stylist reads these notes on every recommendation.`
