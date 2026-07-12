@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../App'
-import { deleteWishlistItem, getGarment, saveGarment, uploadPhoto } from '../lib/data'
+import { deleteWishlistItem, getGarment, removePhotos, saveGarment, uploadPhoto } from '../lib/data'
 import { CATEGORIES, categoryById, COLORS, FORMALITY, LOCATIONS, STATUSES, WARMTH } from '../lib/constants'
 
 const BLANK = {
@@ -21,11 +21,10 @@ export default function GarmentEdit() {
     const meta = prefill.category ? categoryById(prefill.category) : null
     return { ...BLANK, ...(meta ? { formality: meta.formality, warmth: meta.warmth } : {}), ...prefill }
   })
-  const [photoFile, setPhotoFile] = useState(null)
-  const [preview, setPreview] = useState(null)
+  const [newPhotos, setNewPhotos] = useState([]) // { file, preview }
+  const [removed, setRemoved] = useState([]) // existing gallery URLs marked for removal
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
-  const fileRef = useRef()
 
   useEffect(() => {
     if (id) getGarment(id).then(setG).catch((e) => setErr(e.message))
@@ -40,11 +39,14 @@ export default function GarmentEdit() {
     setG((cur) => ({ ...cur, category: catId, formality: meta.formality, warmth: meta.warmth }))
   }
 
-  function onPhoto(e) {
-    const f = e.target.files?.[0]
-    if (!f) return
-    setPhotoFile(f)
-    setPreview(URL.createObjectURL(f))
+  function onPhotos(e) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setNewPhotos((cur) => [
+      ...cur,
+      ...files.map((file) => ({ file, preview: URL.createObjectURL(file) })),
+    ])
+    e.target.value = '' // allow picking the same files again later
   }
 
   async function submit(e) {
@@ -52,15 +54,23 @@ export default function GarmentEdit() {
     setBusy(true)
     setErr(null)
     try {
-      let photo_url = g.photo_url
-      if (photoFile) photo_url = await uploadPhoto(user.id, photoFile)
+      const uploaded = []
+      for (const p of newPhotos) uploaded.push(await uploadPhoto(user.id, p.file))
+      let photo_url = g.photo_url || null
+      const gallery = (g.photos || []).filter((u) => !removed.includes(u))
+      if (!photo_url && uploaded.length) {
+        photo_url = uploaded.shift()
+      }
+      gallery.push(...uploaded)
       const fields = {
         name: g.name.trim(), category: g.category, brand: g.brand || null, size: g.size || null,
         color: g.color || null, pattern: g.pattern || null, material: g.material || null,
         location: g.location, formality: g.formality, warmth: g.warmth, status: g.status,
-        notes: g.notes || null, fit_notes: g.fit_notes || null, photo_url: photo_url || null,
+        notes: g.notes || null, fit_notes: g.fit_notes || null,
+        photo_url, photos: gallery,
       }
       const saved = await saveGarment(fields, id)
+      if (removed.length) await removePhotos(removed).catch(() => {})
       // Arrived here from a purchased shopping-list item — clear it off the list
       if (state?.wishlistId) await deleteWishlistItem(state.wishlistId).catch(() => {})
       navigate(`/closet/${saved.id}`, { replace: true })
@@ -83,13 +93,39 @@ export default function GarmentEdit() {
 
       <form onSubmit={submit} className="card">
         <div className="field">
-          <label>Photo</label>
-          {(preview || g.photo_url) && (
-            <img src={preview || g.photo_url} alt="Garment preview"
-              style={{ width: 160, height: 160, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--hairline)', marginBottom: 8 }} />
+          <label>Photos</label>
+          {(g.photo_url || (g.photos || []).some((u) => !removed.includes(u)) || newPhotos.length > 0) && (
+            <div className="photo-thumbs" style={{ marginBottom: 8 }}>
+              {g.photo_url && (
+                <div className="pt">
+                  <img src={g.photo_url} alt="Cover" />
+                  <span className="tag">Cover</span>
+                </div>
+              )}
+              {(g.photos || []).filter((u) => !removed.includes(u)).map((u) => (
+                <div className="pt" key={u}>
+                  <img src={u} alt="Garment" />
+                  <button type="button" className="x" aria-label="Remove this photo"
+                    onClick={() => setRemoved((r) => [...r, u])}>×</button>
+                </div>
+              ))}
+              {newPhotos.map((p, i) => (
+                <div className="pt" key={p.preview}>
+                  <img src={p.preview} alt="New upload" />
+                  {!g.photo_url && i === 0 && <span className="tag">Cover</span>}
+                  <button type="button" className="x" aria-label="Remove this photo"
+                    onClick={() => setNewPhotos((cur) => cur.filter((x) => x !== p))}>×</button>
+                </div>
+              ))}
+            </div>
           )}
-          <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} />
-          <span className="muted">On your phone this opens the camera — lay the garment flat on a plain surface.</span>
+          <label className="btn ghost file-label">
+            Upload from this device
+            <input type="file" accept="image/*" multiple onChange={onPhotos} style={{ display: 'none' }} />
+          </label>
+          <span className="muted">
+            Pick several at once — the first becomes the cover photo. On your phone this opens your photo library (or camera).
+          </span>
         </div>
 
         <div className="field">

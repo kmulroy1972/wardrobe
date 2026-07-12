@@ -12,6 +12,7 @@ export default function GarmentDetail() {
   const [g, setG] = useState(null)
   const [err, setErr] = useState(null)
   const [confirming, setConfirming] = useState(false)
+  const [activePhoto, setActivePhoto] = useState(null)
 
   useEffect(() => {
     getGarment(id).then(setG).catch((e) => setErr(e.message))
@@ -52,9 +53,25 @@ export default function GarmentDetail() {
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ aspectRatio: '4 / 3' }}>
-          <GarmentThumb garment={g} />
+          <GarmentThumb garment={activePhoto ? { ...g, photo_url: activePhoto } : g} />
         </div>
       </div>
+
+      {(() => {
+        const allPhotos = [g.photo_url, ...(g.photos || [])].filter(Boolean)
+        if (allPhotos.length < 2) return null
+        const shown = activePhoto || allPhotos[0]
+        return (
+          <div className="photo-thumbs">
+            {allPhotos.map((u) => (
+              <button key={u} type="button" className={`pt ${shown === u ? 'active' : ''}`}
+                onClick={() => setActivePhoto(u)} aria-label="Show this photo">
+                <img src={u} alt="" />
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       <div className="card">
         <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 18px', margin: 0, fontSize: '0.92rem' }}>

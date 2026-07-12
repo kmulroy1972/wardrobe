@@ -27,7 +27,8 @@ export async function saveGarment(fields, id) {
 }
 
 export async function deleteGarment(garment) {
-  if (garment.photo_url) await removePhoto(garment.photo_url)
+  const urls = [garment.photo_url, ...(garment.photos || [])].filter(Boolean)
+  if (urls.length) await removePhotos(urls)
   const { error } = await supabase.from('garments').delete().eq('id', garment.id)
   if (error) throw error
 }
@@ -55,12 +56,15 @@ export async function uploadPhoto(userId, file) {
   return data.publicUrl
 }
 
-async function removePhoto(publicUrl) {
-  const marker = '/garments/'
-  const i = publicUrl.lastIndexOf(marker)
-  if (i === -1) return
-  const path = decodeURIComponent(publicUrl.slice(i + marker.length))
-  await supabase.storage.from('garments').remove([path])
+export async function removePhotos(publicUrls) {
+  const paths = publicUrls
+    .map((url) => {
+      const marker = '/garments/'
+      const i = url.lastIndexOf(marker)
+      return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length))
+    })
+    .filter(Boolean)
+  if (paths.length) await supabase.storage.from('garments').remove(paths)
 }
 
 export async function listOutfits() {

@@ -41,7 +41,10 @@ export default function Closet() {
           <div className="eyebrow">The catalog</div>
           <h1>Closet</h1>
         </div>
-        <Link className="btn small" to="/closet/new">+ Add garment</Link>
+        <div className="row" style={{ gap: 8 }}>
+          <Link className="btn small" to="/closet/new">+ Add garment</Link>
+          <Link className="btn small ghost" to="/closet/bulk">Add several</Link>
+        </div>
       </div>
 
       <div className="row">
@@ -81,7 +84,12 @@ export default function Closet() {
           <p>{garments.length === 0
             ? 'Photograph each piece as you put it away — the catalog builds itself.'
             : 'Try clearing the search or filters.'}</p>
-          {garments.length === 0 && <Link className="btn" to="/closet/new">Add your first garment</Link>}
+          {garments.length === 0 && (
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <Link className="btn" to="/closet/new">Add your first garment</Link>
+              <Link className="btn ghost" to="/closet/bulk">Add several at once</Link>
+            </div>
+          )}
         </div>
       ) : (
         <div className="garment-grid">

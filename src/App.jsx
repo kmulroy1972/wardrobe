@@ -6,6 +6,7 @@ import Today from './pages/Today'
 import Closet from './pages/Closet'
 import GarmentEdit from './pages/GarmentEdit'
 import GarmentDetail from './pages/GarmentDetail'
+import BulkAdd from './pages/BulkAdd'
 import Stylist from './pages/Stylist'
 import Outfits from './pages/Outfits'
 import OutfitBuilder from './pages/OutfitBuilder'
@@ -69,6 +70,7 @@ export default function App() {
                 <Route path="/" element={<Today />} />
                 <Route path="/closet" element={<Closet />} />
                 <Route path="/closet/new" element={<GarmentEdit />} />
+                <Route path="/closet/bulk" element={<BulkAdd />} />
                 <Route path="/closet/:id" element={<GarmentDetail />} />
                 <Route path="/closet/:id/edit" element={<GarmentEdit />} />
                 <Route path="/stylist" element={<Stylist />} />
