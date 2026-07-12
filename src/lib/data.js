@@ -103,6 +103,13 @@ export async function getProfile(userId) {
   const { data, error } = await supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle()
   if (error) throw error
   if (data) return data
+  // No profile visible — confirm the session is still valid server-side
+  // before writing anything; a dead token gets cleared instead.
+  const { error: userErr } = await supabase.auth.getUser()
+  if (userErr) {
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    throw new Error('Your sign-in was out of date — please sign in again.')
+  }
   const fresh = { user_id: userId, fit_notes: DEFAULT_FIT_NOTES, sizes: {} }
   const { data: created, error: e2 } = await supabase
     .from('profiles')

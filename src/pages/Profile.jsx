@@ -72,7 +72,24 @@ export default function Profile() {
     }
   }
 
-  if (!p) return <p className="muted">{msg?.text || 'Fetching your profile…'}</p>
+  if (!p) {
+    return (
+      <div className="stack" style={{ maxWidth: 560 }}>
+        <div className="page-head">
+          <div>
+            <div className="eyebrow">Measurements & fit</div>
+            <h1>Profile</h1>
+          </div>
+          <button className="btn small ghost"
+            onClick={() => supabase.auth.signOut().catch(() => supabase.auth.signOut({ scope: 'local' }))}>
+            Sign out
+          </button>
+        </div>
+        <p className="muted">{msg?.text || 'Fetching your profile…'}</p>
+        {msg && <p className="muted">If this keeps happening, sign out and sign back in.</p>}
+      </div>
+    )
+  }
 
   return (
     <div className="stack" style={{ maxWidth: 560 }}>

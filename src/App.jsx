@@ -38,7 +38,19 @@ export default function App() {
   const [session, setSession] = useState(undefined)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        // Verify the stored token against the server — a stale or orphaned
+        // session otherwise causes confusing errors deeper in the app.
+        const { error } = await supabase.auth.getUser()
+        if (error) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+          setSession(null)
+          return
+        }
+      }
+      setSession(data.session)
+    })
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => sub.subscription.unsubscribe()
   }, [])
