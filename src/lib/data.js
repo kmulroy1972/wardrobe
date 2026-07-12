@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { processPhoto } from './image'
+import { photoToBase64, processPhoto } from './image'
 import { DEFAULT_FIT_NOTES } from './constants'
 
 export async function listGarments() {
@@ -150,10 +150,43 @@ export async function deleteWishlistItem(id) {
   if (error) throw error
 }
 
-export async function askStylist({ question, wardrobe, weather, profile, history }) {
+export async function askStylist({ question, wardrobe, outfits, wishlist, weather, profile, history }) {
   const { data, error } = await supabase.functions.invoke('stylist', {
-    body: { question, wardrobe, weather, profile, history },
+    body: { question, wardrobe, outfits, wishlist, weather, profile, history },
   })
   if (error) throw error
   return data
+}
+
+export async function analyzePhoto(file) {
+  const { data: image, media_type } = await photoToBase64(file)
+  const { data, error } = await supabase.functions.invoke('analyze-garment', {
+    body: { image, media_type },
+  })
+  if (error) throw error
+  return data
+}
+
+// ——— AI key management (stored in the user's private_settings row) ———
+
+export async function aiKeyIsSet(userId) {
+  const { data, error } = await supabase
+    .from('private_settings')
+    .select('user_id, anthropic_api_key')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return Boolean(data?.anthropic_api_key)
+}
+
+export async function saveAiKey(userId, key) {
+  const { error } = await supabase
+    .from('private_settings')
+    .upsert({ user_id: userId, anthropic_api_key: key, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+  if (error) throw error
+}
+
+export async function clearAiKey(userId) {
+  const { error } = await supabase.from('private_settings').delete().eq('user_id', userId)
+  if (error) throw error
 }

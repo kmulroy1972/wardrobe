@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../App'
 import { supabase } from '../lib/supabase'
-import { getProfile, saveProfile } from '../lib/data'
+import { aiKeyIsSet, clearAiKey, getProfile, saveAiKey, saveProfile } from '../lib/data'
 
 const SIZE_FIELDS = [
   ['chest', 'Chest'], ['waist', 'Waist'], ['inseam', 'Inseam (seated-checked)'],
@@ -13,10 +13,47 @@ export default function Profile() {
   const [p, setP] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [keySet, setKeySet] = useState(null)
+  const [keyDraft, setKeyDraft] = useState('')
+  const [keyMsg, setKeyMsg] = useState(null)
+  const [keyBusy, setKeyBusy] = useState(false)
 
   useEffect(() => {
     getProfile(user.id).then(setP).catch((e) => setMsg({ ok: false, text: e.message }))
+    aiKeyIsSet(user.id).then(setKeySet).catch(() => setKeySet(false))
   }, [user.id])
+
+  async function submitKey(e) {
+    e.preventDefault()
+    const key = keyDraft.trim()
+    if (!key) return
+    setKeyBusy(true)
+    setKeyMsg(null)
+    try {
+      await saveAiKey(user.id, key)
+      setKeyDraft('')
+      setKeySet(true)
+      setKeyMsg({ ok: true, text: 'Key saved — the AI stylist and photo auto-fill are now on.' })
+    } catch (e2) {
+      setKeyMsg({ ok: false, text: e2.message })
+    } finally {
+      setKeyBusy(false)
+    }
+  }
+
+  async function removeKey() {
+    setKeyBusy(true)
+    setKeyMsg(null)
+    try {
+      await clearAiKey(user.id)
+      setKeySet(false)
+      setKeyMsg({ ok: true, text: 'Key removed. AI features are off; everything else keeps working.' })
+    } catch (e2) {
+      setKeyMsg({ ok: false, text: e2.message })
+    } finally {
+      setKeyBusy(false)
+    }
+  }
 
   async function submit(e) {
     e.preventDefault()
@@ -81,12 +118,37 @@ export default function Profile() {
       </form>
 
       <div className="card">
-        <div className="eyebrow" style={{ marginBottom: 6 }}>AI stylist chat — one-time setup</div>
-        <p style={{ fontSize: '0.88rem', margin: 0 }}>
-          The outfit recommendations work out of the box. Free-form chat (“what should I wear to…”) uses Claude and
-          needs an Anthropic API key: in the Supabase dashboard open <strong>Edge Functions → stylist → Secrets</strong> and
-          add <code>ANTHROPIC_API_KEY</code>. Keys are created at console.anthropic.com.
+        <div className="spread">
+          <div className="eyebrow">AI features</div>
+          {keySet === null ? null : keySet ? (
+            <span className="chip green">On — key saved</span>
+          ) : (
+            <span className="chip">Off — no key yet</span>
+          )}
+        </div>
+        <p style={{ fontSize: '0.88rem', margin: '8px 0' }}>
+          The stylist chat and photo auto-fill run on Claude. Create an API key at{' '}
+          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>{' '}
+          and paste it here once. It's stored in your private database — visible only to your
+          account and the app's own server functions. Everything else works without it.
         </p>
+        <form onSubmit={submitKey} className="row">
+          <input
+            type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)}
+            placeholder={keySet ? 'Paste a new key to replace the saved one' : 'sk-ant-…'}
+            aria-label="Anthropic API key" autoComplete="off"
+            style={{ flex: 1, minWidth: 180, padding: '9px 13px', borderRadius: 999, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.9rem' }}
+          />
+          <button className="btn small" disabled={keyBusy || !keyDraft.trim()}>
+            {keyBusy ? 'Saving…' : 'Save key'}
+          </button>
+          {keySet && (
+            <button type="button" className="btn small danger" onClick={removeKey} disabled={keyBusy}>
+              Remove key
+            </button>
+          )}
+        </form>
+        {keyMsg && <p className={`form-msg ${keyMsg.ok ? 'ok' : ''}`}>{keyMsg.text}</p>}
       </div>
 
       <p className="muted">

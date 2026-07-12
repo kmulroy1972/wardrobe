@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../App'
-import { saveGarment, uploadPhoto } from '../lib/data'
+import { analyzePhoto, saveGarment, uploadPhoto } from '../lib/data'
 import { CATEGORIES, categoryById } from '../lib/constants'
 
 // Bulk cataloging: pick a batch of photos, each becomes its own garment.
@@ -13,23 +13,53 @@ export default function BulkAdd() {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(0)
   const [err, setErr] = useState(null)
+  const [aiNote, setAiNote] = useState(null)
 
   function onPick(e) {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
-    setRows((cur) => [
-      ...cur,
-      ...files.map((file) => ({
-        file,
-        preview: URL.createObjectURL(file),
-        name: '',
-        category: 'casual_shirt',
-      })),
-    ])
+    const newRows = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+      name: '',
+      category: 'casual_shirt',
+      analyzing: true,
+      ai: null,
+      edited: new Set(),
+    }))
+    setRows((cur) => [...cur, ...newRows])
     e.target.value = ''
+    detectAll(newRows)
   }
 
-  const set = (i, k, v) => setRows((cur) => cur.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
+  // Read each photo with Claude vision; fill name/category unless hand-edited
+  async function detectAll(newRows) {
+    for (const row of newRows) {
+      try {
+        const res = await analyzePhoto(row.file)
+        if (res?.error === 'no_key') {
+          setAiNote('Tip: add your Anthropic key on the Profile page and photos will name and categorize themselves here.')
+          setRows((cur) => cur.map((r) => ({ ...r, analyzing: false })))
+          return
+        }
+        setRows((cur) => cur.map((r) => {
+          if (r.preview !== row.preview) return r
+          const f = res?.fields || {}
+          return {
+            ...r,
+            analyzing: false,
+            ai: f,
+            name: r.edited.has('name') || r.name ? r.name : f.name || '',
+            category: r.edited.has('category') ? r.category : f.category || r.category,
+          }
+        }))
+      } catch {
+        setRows((cur) => cur.map((r) => (r.preview === row.preview ? { ...r, analyzing: false } : r)))
+      }
+    }
+  }
+
+  const set = (i, k, v) => setRows((cur) => cur.map((r, j) => (j === i ? { ...r, [k]: v, edited: new Set(r.edited).add(k) } : r)))
   const drop = (i) => setRows((cur) => cur.filter((_, j) => j !== i))
 
   async function saveAll() {
@@ -40,13 +70,19 @@ export default function BulkAdd() {
       let n = 0
       for (const row of rows) {
         const meta = categoryById(row.category)
+        // AI details apply only while the category still matches what the AI saw
+        const ai = row.ai && row.ai.category === row.category ? row.ai : {}
         const photo_url = await uploadPhoto(user.id, row.file)
         await saveGarment({
-          name: row.name.trim() || meta.label,
+          name: row.name.trim() || ai.name || meta.label,
           category: row.category,
           location,
-          formality: meta.formality,
-          warmth: meta.warmth,
+          brand: ai.brand || null,
+          color: ai.color || null,
+          pattern: ai.pattern || null,
+          material: ai.material || null,
+          formality: ai.formality || meta.formality,
+          warmth: ai.warmth || meta.warmth,
           status: 'active',
           photo_url,
           photos: [],
@@ -87,6 +123,7 @@ export default function BulkAdd() {
         <p className="muted" style={{ marginBottom: 0 }}>
           On your phone this opens your photo library — select as many as you like.
         </p>
+        {aiNote && <p className="muted" style={{ marginBottom: 0 }}>{aiNote}</p>}
       </div>
 
       {rows.length > 0 && (
@@ -113,6 +150,10 @@ export default function BulkAdd() {
                   >
                     {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                   </select>
+                  {row.analyzing && <span className="muted">✨ Reading the photo…</span>}
+                  {!row.analyzing && row.ai?.color && (
+                    <span className="muted">✨ Detected: {[row.ai.color, row.ai.pattern, row.ai.material].filter(Boolean).join(' · ')}</span>
+                  )}
                 </div>
                 <button type="button" className="btn small danger" onClick={() => drop(i)} disabled={busy}>
                   Remove

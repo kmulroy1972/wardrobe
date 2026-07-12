@@ -18,6 +18,18 @@ export async function processPhoto(file, max = 1200) {
   })
 }
 
+// Small base64 JPEG for AI analysis — keeps the request payload light.
+export async function photoToBase64(file, max = 512) {
+  const blob = await processPhoto(file, max)
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Could not encode the photo'))
+    reader.readAsDataURL(blob)
+  })
+  return { data: dataUrl.split(',')[1], media_type: 'image/jpeg' }
+}
+
 async function loadImage(file) {
   if ('createImageBitmap' in window) {
     try {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../App'
-import { deleteWishlistItem, getGarment, removePhotos, saveGarment, uploadPhoto } from '../lib/data'
+import { analyzePhoto, deleteWishlistItem, getGarment, removePhotos, saveGarment, uploadPhoto } from '../lib/data'
 import { CATEGORIES, categoryById, COLORS, FORMALITY, LOCATIONS, STATUSES, WARMTH } from '../lib/constants'
 
 const BLANK = {
@@ -25,28 +25,63 @@ export default function GarmentEdit() {
   const [removed, setRemoved] = useState([]) // existing gallery URLs marked for removal
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [aiNote, setAiNote] = useState(null)
+  // Fields the user (or a prefill) has already set — AI suggestions never overwrite these
+  const touched = useRef(new Set(Object.keys(state?.prefill || {})))
 
   useEffect(() => {
     if (id) getGarment(id).then(setG).catch((e) => setErr(e.message))
   }, [id])
 
   function set(k, v) {
+    touched.current.add(k)
     setG((cur) => ({ ...cur, [k]: v }))
   }
 
   function pickCategory(catId) {
     const meta = categoryById(catId)
+    touched.current.add('category').add('formality').add('warmth')
     setG((cur) => ({ ...cur, category: catId, formality: meta.formality, warmth: meta.warmth }))
   }
 
   function onPhotos(e) {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
+    const firstBatch = newPhotos.length === 0
     setNewPhotos((cur) => [
       ...cur,
       ...files.map((file) => ({ file, preview: URL.createObjectURL(file) })),
     ])
     e.target.value = '' // allow picking the same files again later
+    if (!id && firstBatch) autoFill(files[0])
+  }
+
+  // Ask Claude vision to read the photo and fill whatever the user hasn't set
+  async function autoFill(file) {
+    setAnalyzing(true)
+    setAiNote(null)
+    try {
+      const res = await analyzePhoto(file)
+      if (res?.error === 'no_key') {
+        setAiNote('Tip: add your Anthropic key on the Profile page and photos will fill this form in automatically.')
+        return
+      }
+      if (!res?.fields) return
+      setG((cur) => {
+        const merged = { ...cur }
+        for (const k of ['name', 'category', 'brand', 'color', 'pattern', 'material', 'formality', 'warmth']) {
+          if (res.fields[k] && !touched.current.has(k) && !(k === 'name' && cur.name.trim())) {
+            merged[k] = res.fields[k]
+          }
+        }
+        return merged
+      })
+    } catch {
+      // analysis is best-effort; the form still works by hand
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   async function submit(e) {
@@ -126,6 +161,8 @@ export default function GarmentEdit() {
           <span className="muted">
             Pick several at once — the first becomes the cover photo. On your phone this opens your photo library (or camera).
           </span>
+          {analyzing && <span className="muted">✨ Reading the photo to fill in the details…</span>}
+          {aiNote && <span className="muted">{aiNote}</span>}
         </div>
 
         <div className="field">

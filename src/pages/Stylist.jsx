@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import OutfitSuggestion from '../components/OutfitSuggestion'
 import { useAuth } from '../App'
-import { addWishlistItem, askStylist, getProfile, listGarments } from '../lib/data'
+import { addWishlistItem, askStylist, getProfile, listGarments, listOutfits, listWishlist } from '../lib/data'
 import { fetchForecast, dayName } from '../lib/weather'
 import { recommendOutfits } from '../lib/outfitEngine'
 import { FORMALITY, SLOT_LABELS } from '../lib/constants'
@@ -59,7 +59,32 @@ export default function Stylist() {
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
   const [aiStatus, setAiStatus] = useState('unknown') // unknown | ready | no_key
+  const [context, setContext] = useState(null) // outfits/wishlist/weather cache for the chat
   const chatEnd = useRef(null)
+
+  async function loadContext() {
+    if (context) return context
+    const [outfitsData, wishlistData, wxDc, wxHowell] = await Promise.all([
+      listOutfits().catch(() => []),
+      listWishlist().catch(() => []),
+      fetchForecast('dc').catch(() => null),
+      fetchForecast('howell').catch(() => null),
+    ])
+    const ctx = {
+      outfits: outfitsData.map((o) => ({
+        name: o.name,
+        occasion: o.occasion,
+        location: o.location,
+        items: (o.outfit_items || []).map((it) => it.garment?.name).filter(Boolean),
+      })),
+      wishlist: wishlistData.map((w) => ({
+        name: w.name, category: w.category, priority: w.priority, status: w.status, location: w.location,
+      })),
+      weather: { dc: wxDc?.daily, howell: wxHowell?.daily },
+    }
+    setContext(ctx)
+    return ctx
+  }
 
   useEffect(() => {
     listGarments().then(setGarments).catch(() => setGarments([]))
@@ -89,14 +114,19 @@ export default function Stylist() {
     setMessages((ms) => [...ms, { role: 'user', text: question }])
     setThinking(true)
     try {
-      const profile = await getProfile(user.id)
-      const wardrobe = (garments || []).filter((g) => g.status === 'active').map((g) => ({
-        id: g.id, name: g.name, category: g.category, brand: g.brand, color: g.color,
+      const [profile, ctx] = await Promise.all([getProfile(user.id), loadContext()])
+      const wardrobe = (garments || []).map((g) => ({
+        id: g.id, name: g.name, category: g.category, brand: g.brand, size: g.size, color: g.color,
         pattern: g.pattern, material: g.material, location: g.location,
-        formality: g.formality, warmth: g.warmth, fit_notes: g.fit_notes,
+        formality: g.formality, warmth: g.warmth, status: g.status,
+        times_worn: g.times_worn, last_worn: g.last_worn, fit_notes: g.fit_notes,
       }))
-      const weather = wx ? { city, today: wx.daily[0], week: wx.daily } : null
-      const res = await askStylist({ question, wardrobe, weather, profile: { height: profile.height, fit_notes: profile.fit_notes, sizes: profile.sizes }, history })
+      const res = await askStylist({
+        question, wardrobe,
+        outfits: ctx.outfits, wishlist: ctx.wishlist, weather: ctx.weather,
+        profile: { height: profile.height, fit_notes: profile.fit_notes, sizes: profile.sizes },
+        history,
+      })
       if (res?.error === 'no_key') {
         setAiStatus('no_key')
         setMessages((ms) => [...ms, { role: 'assistant', text: 'The AI stylist isn’t connected yet — an Anthropic API key needs to be added (see Profile page for the one-time setup). The outfit suggestions above work without it.' }])
@@ -105,7 +135,16 @@ export default function Stylist() {
         setMessages((ms) => [...ms, { role: 'assistant', text: res?.text || 'No answer came back — try again.' }])
       }
     } catch (err) {
-      setMessages((ms) => [...ms, { role: 'assistant', text: `Something went wrong: ${err.message}` }])
+      let text = `Something went wrong: ${err.message}`
+      try {
+        const body = await err.context?.json()
+        if (body?.error === 'anthropic_error') {
+          text = /authentication|invalid x-api-key|401/i.test(body.detail || '')
+            ? 'Your Anthropic API key was rejected — double-check it on the Profile page.'
+            : 'The AI service returned an error — try again in a moment.'
+        }
+      } catch { /* keep the generic message */ }
+      setMessages((ms) => [...ms, { role: 'assistant', text }])
     } finally {
       setThinking(false)
     }
@@ -137,6 +176,41 @@ export default function Stylist() {
           <div className="eyebrow">Your valet</div>
           <h1>Stylist</h1>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="eyebrow" style={{ marginBottom: 8 }}>Ask about your wardrobe</div>
+        <div className="chat" aria-live="polite">
+          {messages.length === 0 && (
+            <p className="muted" style={{ margin: 0 }}>
+              Try: “What should I wear to a client dinner in Howell on Friday?” ·
+              “Pack me for two days of Hill meetings” ·
+              “Which of my shirts go with the navy blazer?” ·
+              “What's the biggest gap in my D.C. closet?”
+            </p>
+          )}
+          {messages.map((m, i) => (
+            <div key={i} className={`bubble ${m.role === 'user' ? 'me' : 'ai'}`}>
+              {m.role === 'assistant' ? renderAiText(m.text) : m.text}
+            </div>
+          ))}
+          {thinking && <div className="bubble ai">Consulting the closet…</div>}
+          <div ref={chatEnd} />
+        </div>
+        <form onSubmit={send} className="row" style={{ marginTop: 12 }}>
+          <input
+            value={draft} onChange={(e) => setDraft(e.target.value)}
+            placeholder="Ask about outfits, packing, gaps…" aria-label="Ask the stylist"
+            style={{ flex: 1, minWidth: 160, padding: '10px 14px', borderRadius: 999, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
+          />
+          <button className="btn" disabled={thinking || !draft.trim()}>Ask</button>
+        </form>
+        {aiStatus === 'no_key' && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            One-time setup: paste your Anthropic API key on the Profile page to turn on the chat.
+            The outfit suggestions below work without it.
+          </p>
+        )}
       </div>
 
       <div className="card">
@@ -200,37 +274,6 @@ export default function Stylist() {
         </div>
       )}
 
-      <div className="card">
-        <div className="eyebrow" style={{ marginBottom: 8 }}>Ask the stylist anything</div>
-        <div className="chat" aria-live="polite">
-          {messages.length === 0 && (
-            <p className="muted" style={{ margin: 0 }}>
-              Try: “What should I wear to a client dinner in Howell on Friday?” or
-              “Which of my shirts go with the navy blazer?”
-            </p>
-          )}
-          {messages.map((m, i) => (
-            <div key={i} className={`bubble ${m.role === 'user' ? 'me' : 'ai'}`}>
-              {m.role === 'assistant' ? renderAiText(m.text) : m.text}
-            </div>
-          ))}
-          {thinking && <div className="bubble ai">Consulting the closet…</div>}
-          <div ref={chatEnd} />
-        </div>
-        <form onSubmit={send} className="row" style={{ marginTop: 12 }}>
-          <input
-            value={draft} onChange={(e) => setDraft(e.target.value)}
-            placeholder="Ask about an outfit…" aria-label="Ask the stylist"
-            style={{ flex: 1, minWidth: 160, padding: '10px 14px', borderRadius: 999, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
-          />
-          <button className="btn" disabled={thinking || !draft.trim()}>Ask</button>
-        </form>
-        {aiStatus === 'no_key' && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            One-time setup: add an <code>ANTHROPIC_API_KEY</code> secret to the “stylist” edge function in Supabase to turn on free-form chat.
-          </p>
-        )}
-      </div>
     </div>
   )
 }
