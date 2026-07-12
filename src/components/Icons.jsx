@@ -27,6 +27,10 @@ export const PersonIcon = (p) => (
   <svg {...base} {...p}><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.8-3.5 3.6-5.5 7-5.5s6.2 2 7 5.5" /></svg>
 )
 
+export const BagIcon = (p) => (
+  <svg {...base} {...p}><path d="M6 8h12l1.2 12H4.8L6 8z" /><path d="M9 10V6.5a3 3 0 0 1 6 0V10" /></svg>
+)
+
 export const PlusIcon = (p) => (
   <svg {...base} {...p}><path d="M12 5v14M5 12h14" /></svg>
 )

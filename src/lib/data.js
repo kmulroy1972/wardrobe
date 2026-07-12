@@ -120,6 +120,32 @@ export async function saveProfile(userId, fields) {
   return data
 }
 
+export async function listWishlist() {
+  const { data, error } = await supabase
+    .from('wishlist')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function addWishlistItem(fields) {
+  const { data, error } = await supabase.from('wishlist').insert(fields).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updateWishlistItem(id, fields) {
+  const { data, error } = await supabase.from('wishlist').update(fields).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteWishlistItem(id) {
+  const { error } = await supabase.from('wishlist').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function askStylist({ question, wardrobe, weather, profile, history }) {
   const { data, error } = await supabase.functions.invoke('stylist', {
     body: { question, wardrobe, weather, profile, history },

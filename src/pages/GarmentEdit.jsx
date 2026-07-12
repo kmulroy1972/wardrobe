@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../App'
-import { getGarment, saveGarment, uploadPhoto } from '../lib/data'
+import { deleteWishlistItem, getGarment, saveGarment, uploadPhoto } from '../lib/data'
 import { CATEGORIES, categoryById, COLORS, FORMALITY, LOCATIONS, STATUSES, WARMTH } from '../lib/constants'
 
 const BLANK = {
@@ -13,8 +13,14 @@ const BLANK = {
 export default function GarmentEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { state } = useLocation()
   const { user } = useAuth()
-  const [g, setG] = useState(id ? null : BLANK)
+  const [g, setG] = useState(() => {
+    if (id) return null
+    const prefill = state?.prefill || {}
+    const meta = prefill.category ? categoryById(prefill.category) : null
+    return { ...BLANK, ...(meta ? { formality: meta.formality, warmth: meta.warmth } : {}), ...prefill }
+  })
   const [photoFile, setPhotoFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -55,6 +61,8 @@ export default function GarmentEdit() {
         notes: g.notes || null, fit_notes: g.fit_notes || null, photo_url: photo_url || null,
       }
       const saved = await saveGarment(fields, id)
+      // Arrived here from a purchased shopping-list item — clear it off the list
+      if (state?.wishlistId) await deleteWishlistItem(state.wishlistId).catch(() => {})
       navigate(`/closet/${saved.id}`, { replace: true })
     } catch (e2) {
       setErr(e2.message)

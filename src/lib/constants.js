@@ -16,7 +16,15 @@ export const CATEGORIES = [
   { id: 'outerwear', label: 'Coat / Outer jacket', slot: 'outer', formality: 'casual', warmth: 'warm' },
   { id: 'tie', label: 'Tie / Bow tie', slot: 'tie', formality: 'formal', warmth: 'all' },
   { id: 'belt', label: 'Belt', slot: 'belt', formality: 'business_casual', warmth: 'all' },
-  { id: 'accessory', label: 'Accessory', slot: 'accessory', formality: 'casual', warmth: 'all' },
+  { id: 'pocket_square', label: 'Pocket square', slot: 'accessory', formality: 'formal', warmth: 'all' },
+  { id: 'scarf', label: 'Scarf', slot: 'accessory', formality: 'casual', warmth: 'warm' },
+  { id: 'hat', label: 'Hat / Cap', slot: 'accessory', formality: 'casual', warmth: 'all' },
+  { id: 'gloves', label: 'Gloves', slot: 'accessory', formality: 'casual', warmth: 'warm' },
+  { id: 'watch', label: 'Watch', slot: 'accessory', formality: 'business_casual', warmth: 'all' },
+  { id: 'cufflinks', label: 'Cufflinks', slot: 'accessory', formality: 'formal', warmth: 'all' },
+  { id: 'socks', label: 'Socks', slot: 'accessory', formality: 'casual', warmth: 'all' },
+  { id: 'bag', label: 'Bag / Briefcase', slot: 'accessory', formality: 'business_casual', warmth: 'all' },
+  { id: 'accessory', label: 'Other accessory', slot: 'accessory', formality: 'casual', warmth: 'all' },
 ]
 
 export const categoryById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1]
@@ -54,6 +62,17 @@ export const STATUSES = [
 export const LOCATIONS = [
   { id: 'dc', label: 'Washington, D.C.' },
   { id: 'howell', label: 'Howell, NJ' },
+]
+
+export const WISHLIST_PRIORITIES = [
+  { id: 'soon', label: 'Need soon' },
+  { id: 'someday', label: 'Someday' },
+]
+
+export const WISHLIST_STATUSES = [
+  { id: 'to_buy', label: 'To buy' },
+  { id: 'ordered', label: 'Ordered' },
+  { id: 'purchased', label: 'Purchased' },
 ]
 
 export const SLOT_LABELS = {

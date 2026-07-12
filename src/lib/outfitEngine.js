@@ -30,6 +30,7 @@ const OCCASION_CATEGORIES = {
     shoes: ['dress_shoes'],
     tie: ['tie'],
     belt: ['belt'],
+    accessory: ['pocket_square'],
   },
   business_casual: {
     jacket: ['blazer'],
@@ -177,6 +178,7 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
     .filter((x) => x.s >= 0)
     .sort((a, b) => b.s - a.s)
     .slice(0, 3)
+  const coldAccessories = pool.filter((g) => ['scarf', 'gloves', 'hat'].includes(g.category))
 
   // Formal prefers a full suit; separates are the fallback
   const useSuit = occasion === 'formal' && (bySlot.suit || []).length > 0
@@ -205,8 +207,14 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
           }
           if (occasion === 'formal' && bySlot.tie?.length) outfit.push({ slot: 'tie', g: bySlot.tie[0].g })
           if (bySlot.belt?.length && (b || j)) outfit.push({ slot: 'belt', g: bySlot.belt[0].g })
+          if (occasion === 'formal' && bySlot.accessory?.length) {
+            outfit.push({ slot: 'accessory', g: bySlot.accessory[0].g })
+          }
           if ((wBand === 'cold' || (wBand === 'cool' && rain)) && outers.length) {
             outfit.push({ slot: 'outer', g: outers[0].g })
+          }
+          if (wBand === 'cold' && coldAccessories.length) {
+            outfit.push({ slot: 'accessory', g: coldAccessories[0] })
           }
 
           let score = outfit.reduce((acc, { g }) => acc + garmentScore(g, occasion, wBand), 0) / outfit.length

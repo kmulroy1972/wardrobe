@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import WeatherCard from '../components/WeatherCard'
 import OutfitSuggestion from '../components/OutfitSuggestion'
 import { fetchForecast } from '../lib/weather'
-import { listGarments } from '../lib/data'
+import { listGarments, listWishlist } from '../lib/data'
 import { recommendOutfits } from '../lib/outfitEngine'
 import { CITIES } from '../lib/config'
 
@@ -11,6 +11,7 @@ export default function Today() {
   const [wx, setWx] = useState({})
   const [wxErr, setWxErr] = useState({})
   const [garments, setGarments] = useState(null)
+  const [toBuyCount, setToBuyCount] = useState(0)
   const [city, setCity] = useState('dc')
 
   useEffect(() => {
@@ -20,6 +21,9 @@ export default function Today() {
         .catch((e) => setWxErr((w) => ({ ...w, [key]: e.message })))
     }
     listGarments().then(setGarments).catch(() => setGarments([]))
+    listWishlist()
+      .then((items) => setToBuyCount(items.filter((i) => i.status !== 'purchased').length))
+      .catch(() => {})
   }, [])
 
   const today = new Date()
@@ -92,6 +96,7 @@ export default function Today() {
         <Link to="/closet" className="chip green">D.C. closet · {dcCount} pieces</Link>
         <Link to="/closet" className="chip green">Howell closet · {hwCount} pieces</Link>
         <Link to="/outfits" className="chip brass">Saved outfits</Link>
+        {toBuyCount > 0 && <Link to="/tobuy" className="chip brass">To buy · {toBuyCount}</Link>}
       </div>
     </div>
   )

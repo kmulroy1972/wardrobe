@@ -2,10 +2,47 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import OutfitSuggestion from '../components/OutfitSuggestion'
 import { useAuth } from '../App'
-import { askStylist, getProfile, listGarments } from '../lib/data'
+import { addWishlistItem, askStylist, getProfile, listGarments } from '../lib/data'
 import { fetchForecast, dayName } from '../lib/weather'
 import { recommendOutfits } from '../lib/outfitEngine'
-import { FORMALITY } from '../lib/constants'
+import { FORMALITY, SLOT_LABELS } from '../lib/constants'
+
+// A sensible category to shop for when an outfit slot has nothing in it
+const GAP_CATEGORY = {
+  formal: { suit: 'suit', jacket: 'blazer', top: 'dress_shirt', bottom: 'dress_pants', shoes: 'dress_shoes' },
+  business_casual: { top: 'dress_shirt', bottom: 'chinos', shoes: 'dress_shoes' },
+  casual: { top: 'casual_shirt', bottom: 'jeans', shoes: 'casual_shoes' },
+}
+
+function GapList({ missing, occasion, city }) {
+  const [added, setAdded] = useState({})
+  async function add(slot) {
+    const category = GAP_CATEGORY[occasion]?.[slot] || 'accessory'
+    try {
+      await addWishlistItem({
+        name: `${SLOT_LABELS[slot] || slot} (${occasion.replace('_', ' ')})`,
+        category,
+        priority: 'soon',
+        location: city,
+        notes: 'Added from a stylist gap',
+      })
+      setAdded((a) => ({ ...a, [slot]: true }))
+    } catch {
+      // leave the button active so it can be retried
+    }
+  }
+  return (
+    <div className="row" style={{ gap: 6 }}>
+      <span className="muted">Missing for {occasion.replace('_', ' ')}:</span>
+      {missing.map((slot) => (
+        <button key={slot} className="chip brass" style={{ cursor: 'pointer' }}
+          onClick={() => add(slot)} disabled={added[slot]}>
+          {added[slot] ? `${SLOT_LABELS[slot]} ✓ on the list` : `+ To Buy: ${SLOT_LABELS[slot] || slot}`}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export default function Stylist() {
   const { user } = useAuth()
@@ -147,6 +184,9 @@ export default function Stylist() {
             For a {occasion.replace('_', ' ')} outfit in {city === 'dc' ? 'D.C.' : 'Howell'} I still need:{' '}
             {rec.missing.map((m) => m.replace('_', ' ')).join(', ')}.
           </p>
+          <div className="row" style={{ justifyContent: 'center', marginBottom: 10 }}>
+            <GapList missing={rec.missing} occasion={occasion} city={city} />
+          </div>
           <Link className="btn" to="/closet/new">Add garments</Link>
         </div>
       ) : (
@@ -155,10 +195,7 @@ export default function Stylist() {
             <OutfitSuggestion key={o.name + i + shuffle} outfit={o} occasion={occasion} location={city} />
           ))}
           {rec.missing.length > 0 && (
-            <p className="muted">
-              Gaps in this closet for {occasion.replace('_', ' ')}: {rec.missing.join(', ')} —{' '}
-              <a href={`https://www.google.com/search?tbm=shop&q=${encodeURIComponent('boys ' + rec.missing[0].replace('_', ' '))}`} target="_blank" rel="noreferrer">shop online ↗</a>
-            </p>
+            <GapList missing={rec.missing} occasion={occasion} city={city} />
           )}
         </div>
       )}

@@ -9,8 +9,9 @@ import GarmentDetail from './pages/GarmentDetail'
 import Stylist from './pages/Stylist'
 import Outfits from './pages/Outfits'
 import OutfitBuilder from './pages/OutfitBuilder'
+import ToBuy from './pages/ToBuy'
 import Profile from './pages/Profile'
-import { GridIcon, HangerIcon, PersonIcon, SparkIcon, SunIcon } from './components/Icons'
+import { BagIcon, GridIcon, HangerIcon, PersonIcon, SparkIcon, SunIcon } from './components/Icons'
 
 const AuthContext = createContext(null)
 export const useAuth = () => useContext(AuthContext)
@@ -20,6 +21,7 @@ const NAV = [
   { to: '/closet', label: 'Closet', icon: HangerIcon },
   { to: '/stylist', label: 'Stylist', icon: SparkIcon },
   { to: '/outfits', label: 'Outfits', icon: GridIcon },
+  { to: '/tobuy', label: 'To Buy', icon: BagIcon },
   { to: '/profile', label: 'Profile', icon: PersonIcon },
 ]
 
@@ -72,6 +74,7 @@ export default function App() {
                 <Route path="/stylist" element={<Stylist />} />
                 <Route path="/outfits" element={<Outfits />} />
                 <Route path="/outfits/new" element={<OutfitBuilder />} />
+                <Route path="/tobuy" element={<ToBuy />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="*" element={<Today />} />
               </Routes>
