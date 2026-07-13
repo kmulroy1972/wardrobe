@@ -299,5 +299,34 @@ button.pt { cursor: pointer; }
 .bulk-row { display: grid; grid-template-columns: 84px 1fr auto; gap: 12px; align-items: center; }
 @media (max-width: 560px) { .bulk-row { grid-template-columns: 64px 1fr; } .bulk-row > button { grid-column: 2; justify-self: start; } }
 
+/* ————— Closet select mode ————— */
+.garment-card { position: relative; }
+.garment-card.selectable { cursor: pointer; text-align: left; font: inherit; padding: 0; }
+.garment-card.selected { outline: 2px solid var(--brass); outline-offset: -2px; }
+.check-badge {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bottle); color: #f4f2ea; border-radius: 50%; font-size: 13px;
+  box-shadow: 0 1px 4px rgba(34, 38, 31, 0.3);
+}
+.select-bar {
+  position: fixed; left: 12px; right: 12px; z-index: 25;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--ink); color: #f4f2ea;
+  border-radius: 14px; padding: 10px 16px; font-size: 0.85rem;
+  box-shadow: 0 8px 24px rgba(34, 38, 31, 0.3);
+}
+.select-bar button {
+  border: none; border-radius: 999px; padding: 7px 14px;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.select-bar button:disabled { opacity: 0.5; cursor: default; }
+.select-bar-delete { background: var(--claret); color: #f4f2ea; }
+.select-bar-cancel { background: transparent; color: #d8d4c9; }
+@media (min-width: 900px) {
+  .select-bar { left: 232px; right: 32px; bottom: 20px; max-width: 996px; }
+}
+
 .fade-in { animation: rise 0.35s ease both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
