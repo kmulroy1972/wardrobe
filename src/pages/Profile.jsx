@@ -27,6 +27,13 @@ export default function Profile() {
     e.preventDefault()
     const key = keyDraft.trim()
     if (!key) return
+    if (!key.startsWith('sk-ant-') || key.length < 40 || /\s|http/i.test(key)) {
+      setKeyMsg({
+        ok: false,
+        text: 'That doesn’t look like an API key — keys start with "sk-ant-" and are quite long. On console.anthropic.com open API Keys → Create Key, then copy the key itself (not the page link).',
+      })
+      return
+    }
     setKeyBusy(true)
     setKeyMsg(null)
     try {

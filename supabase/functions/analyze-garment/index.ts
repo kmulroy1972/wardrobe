@@ -1,7 +1,6 @@
-// Garment photo analysis: Claude vision reads a photo and returns catalog
-// fields (name, category, color, pattern, material, dress code, weight).
-// Key resolution matches the stylist function: env secret, else the
-// private_settings table.
+// Garment photo analysis: Claude vision reads one or more photos of a single
+// garment (including brand/size label close-ups) and returns catalog fields.
+// Key resolution: env ANTHROPIC_API_KEY, else the private_settings table.
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -41,18 +40,19 @@ const COLORS = [
   'Purple', 'Orange', 'Yellow', 'Multi / Pattern',
 ]
 
-const PROMPT = `This photo shows one menswear garment or accessory being cataloged for a personal wardrobe app. Analyze it and respond with ONLY a JSON object (no code fences, no commentary):
+const PROMPT = `These photos all show the SAME single menswear garment or accessory being cataloged for a personal wardrobe app. Some photos may be close-ups of brand labels, size tags, or fabric — read any visible text on them carefully. Respond with ONLY a JSON object (no code fences, no commentary):
 {
   "name": "short descriptive name, e.g. 'Navy chalk-stripe suit' or 'Brown suede loafers'",
   "category": "one of: ${CATEGORIES.join(', ')}",
   "color": "the dominant color, one of: ${COLORS.join(', ')}",
   "pattern": "e.g. 'Solid', 'Stripe', 'Check', 'Herringbone', 'Plaid' — or '' if unclear",
-  "material": "best guess, e.g. 'Wool', 'Cotton', 'Denim', 'Leather' — or '' if unclear",
-  "brand": "brand name ONLY if a label/logo is clearly visible, else ''",
+  "material": "best guess or from the care label, e.g. 'Wool', 'Cotton', 'Denim', 'Leather' — or '' if unclear",
+  "brand": "brand name ONLY if a label/logo is legible in any photo, else ''",
+  "size": "size EXACTLY as printed on a visible tag, e.g. 'Boys 14', '13.5', '36S', '6D' — or '' if no tag is legible",
   "formality": "one of: formal, business_casual, casual",
   "warmth": "garment weight — one of: light, mid, warm, all (use 'all' for shoes/accessories)"
 }
-Category guidance: full suits (jacket+trousers shown together) = suit; sport coats alone = blazer; button-front shirts with stiff collars = dress_shirt, softer/patterned casual button-ups = casual_shirt; sneakers = casual_shoes; oxfords/derbies/loafers = dress_shoes.`
+Category guidance: full suits (jacket+trousers shown together) = suit; sport coats alone = blazer; button-front shirts with stiff collars = dress_shirt, softer/patterned casual button-ups = casual_shirt; sneakers = casual_shoes; oxfords/derbies/loafers = dress_shoes. Never invent brand or size — only report what is actually legible.`
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -66,8 +66,14 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: 'bad_request' }, 400)
   }
-  const { image, media_type = 'image/jpeg' } = payload
-  if (!image || typeof image !== 'string') return json({ error: 'bad_request' }, 400)
+  const { image, images, media_type = 'image/jpeg' } = payload
+  let imageList: Array<{ data: string; media_type?: string }> = []
+  if (Array.isArray(images)) {
+    imageList = images.filter((i) => i && typeof i.data === 'string').slice(0, 4)
+  } else if (typeof image === 'string') {
+    imageList = [{ data: image, media_type }]
+  }
+  if (!imageList.length) return json({ error: 'bad_request' }, 400)
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -82,7 +88,10 @@ Deno.serve(async (req) => {
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type, data: image } },
+          ...imageList.map((i) => ({
+            type: 'image',
+            source: { type: 'base64', media_type: i.media_type || 'image/jpeg', data: i.data },
+          })),
           { type: 'text', text: PROMPT },
         ],
       }],
@@ -111,6 +120,7 @@ Deno.serve(async (req) => {
     if (typeof fields.pattern === 'string' && fields.pattern) clean.pattern = fields.pattern.slice(0, 40)
     if (typeof fields.material === 'string' && fields.material) clean.material = fields.material.slice(0, 40)
     if (typeof fields.brand === 'string' && fields.brand) clean.brand = fields.brand.slice(0, 60)
+    if (typeof fields.size === 'string' && fields.size) clean.size = fields.size.slice(0, 30)
     if (['formal', 'business_casual', 'casual'].includes(fields.formality)) clean.formality = fields.formality
     if (['light', 'mid', 'warm', 'all'].includes(fields.warmth)) clean.warmth = fields.warmth
     return json({ fields: clean })

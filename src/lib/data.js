@@ -165,10 +165,14 @@ export async function askStylist({ question, wardrobe, outfits, wishlist, weathe
   return data
 }
 
-export async function analyzePhoto(file) {
-  const { data: image, media_type } = await photoToBase64(file)
+// Accepts one file/blob or an array (e.g. garment shot + label close-up);
+// up to three photos of the same garment are sent for one analysis.
+export async function analyzePhoto(files) {
+  const list = (Array.isArray(files) ? files : [files]).slice(0, 3)
+  const images = []
+  for (const f of list) images.push(await photoToBase64(f))
   const { data, error } = await supabase.functions.invoke('analyze-garment', {
-    body: { image, media_type },
+    body: { images },
   })
   if (error) throw error
   return data

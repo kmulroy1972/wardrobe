@@ -53,8 +53,16 @@ export default function BulkAdd() {
             category: r.edited.has('category') ? r.category : f.category || r.category,
           }
         }))
-      } catch {
+      } catch (err) {
         setRows((cur) => cur.map((r) => (r.preview === row.preview ? { ...r, analyzing: false } : r)))
+        try {
+          const body = await err.context?.json()
+          if (body?.error === 'anthropic_error' && /authentication|invalid x-api-key|401/i.test(body.detail || '')) {
+            setAiNote('Auto-detect couldn’t run: the Anthropic key was rejected — re-paste it on the Profile page.')
+            setRows((cur) => cur.map((r) => ({ ...r, analyzing: false })))
+            return
+          }
+        } catch { /* keep going for other rows */ }
       }
     }
   }
@@ -78,6 +86,7 @@ export default function BulkAdd() {
           category: row.category,
           location,
           brand: ai.brand || null,
+          size: ai.size || null,
           color: ai.color || null,
           pattern: ai.pattern || null,
           material: ai.material || null,
@@ -151,8 +160,10 @@ export default function BulkAdd() {
                     {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                   </select>
                   {row.analyzing && <span className="muted">✨ Reading the photo…</span>}
-                  {!row.analyzing && row.ai?.color && (
-                    <span className="muted">✨ Detected: {[row.ai.color, row.ai.pattern, row.ai.material].filter(Boolean).join(' · ')}</span>
+                  {!row.analyzing && row.ai && Object.keys(row.ai).length > 0 && (
+                    <span className="muted">
+                      ✨ Detected: {[row.ai.brand, row.ai.size, row.ai.color, row.ai.pattern, row.ai.material].filter(Boolean).join(' · ') || 'no extra details'}
+                    </span>
                   )}
                 </div>
                 <button type="button" className="btn small danger" onClick={() => drop(i)} disabled={busy}>

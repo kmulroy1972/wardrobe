@@ -54,15 +54,28 @@ export default function GarmentEdit() {
       ...files.map((file) => ({ file, preview: URL.createObjectURL(file) })),
     ])
     e.target.value = '' // allow picking the same files again later
-    if (!id && firstBatch) autoFill(files[0])
+    if (!id && firstBatch) autoFill(files)
   }
 
-  // Ask Claude vision to read the photo and fill whatever the user hasn't set
-  async function autoFill(file) {
+  // Re-run analysis on demand using new photos plus any already-saved ones
+  async function reanalyze() {
+    const sources = newPhotos.map((p) => p.file)
+    const existing = [g.photo_url, ...(g.photos || []).filter((u) => !removed.includes(u))].filter(Boolean)
+    for (const url of existing.slice(0, Math.max(0, 3 - sources.length))) {
+      try {
+        sources.push(await fetch(url).then((r) => r.blob()))
+      } catch { /* skip photos that fail to load */ }
+    }
+    if (sources.length) await autoFill(sources)
+  }
+
+  // Ask Claude vision to read the photos (garment + any label close-ups)
+  // and fill whatever the user hasn't set
+  async function autoFill(files) {
     setAnalyzing(true)
     setAiNote(null)
     try {
-      const res = await analyzePhoto(file)
+      const res = await analyzePhoto(files)
       if (res?.error === 'no_key') {
         setAiNote('Tip: add your Anthropic key on the Profile page and photos will fill this form in automatically.')
         return
@@ -70,15 +83,29 @@ export default function GarmentEdit() {
       if (!res?.fields) return
       setG((cur) => {
         const merged = { ...cur }
-        for (const k of ['name', 'category', 'brand', 'color', 'pattern', 'material', 'formality', 'warmth']) {
-          if (res.fields[k] && !touched.current.has(k) && !(k === 'name' && cur.name.trim())) {
-            merged[k] = res.fields[k]
+        // Text fields: fill only blanks the user hasn't touched
+        for (const k of ['name', 'brand', 'size', 'color', 'pattern', 'material']) {
+          const blank = !cur[k] || !String(cur[k]).trim()
+          if (res.fields[k] && blank && !touched.current.has(k)) merged[k] = res.fields[k]
+        }
+        // Category / dress code / weight have defaults — only auto-set on new garments
+        if (!id) {
+          for (const k of ['category', 'formality', 'warmth']) {
+            if (res.fields[k] && !touched.current.has(k)) merged[k] = res.fields[k]
           }
         }
         return merged
       })
-    } catch {
-      // analysis is best-effort; the form still works by hand
+    } catch (err) {
+      // best-effort, but key problems should not fail silently
+      try {
+        const body = await err.context?.json()
+        if (body?.error === 'anthropic_error') {
+          setAiNote(/authentication|invalid x-api-key|401/i.test(body.detail || '')
+            ? 'Auto-fill couldn’t run: the Anthropic key was rejected — re-paste it on the Profile page.'
+            : 'Auto-fill couldn’t reach the AI service just now — fill in by hand or try Re-analyze.')
+        }
+      } catch { /* leave quiet for network blips */ }
     } finally {
       setAnalyzing(false)
     }
@@ -154,14 +181,22 @@ export default function GarmentEdit() {
               ))}
             </div>
           )}
-          <label className="btn ghost file-label">
-            Upload from this device
-            <input type="file" accept="image/*" multiple onChange={onPhotos} style={{ display: 'none' }} />
-          </label>
+          <div className="row">
+            <label className="btn ghost file-label">
+              Upload from this device
+              <input type="file" accept="image/*" multiple onChange={onPhotos} style={{ display: 'none' }} />
+            </label>
+            {(g.photo_url || (g.photos || []).length > 0 || newPhotos.length > 0) && (
+              <button type="button" className="btn ghost small" onClick={reanalyze} disabled={analyzing}>
+                ✨ Re-analyze photos
+              </button>
+            )}
+          </div>
           <span className="muted">
-            Pick several at once — the first becomes the cover photo. On your phone this opens your photo library (or camera).
+            Pick several at once — the first becomes the cover photo, and a close-up of the
+            brand or size tag helps the auto-fill read them. On your phone this opens your photo library (or camera).
           </span>
-          {analyzing && <span className="muted">✨ Reading the photo to fill in the details…</span>}
+          {analyzing && <span className="muted">✨ Reading the photos to fill in the details…</span>}
           {aiNote && <span className="muted">{aiNote}</span>}
         </div>
 
