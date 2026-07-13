@@ -40,11 +40,12 @@ const COLORS = [
   'Purple', 'Orange', 'Yellow', 'Multi / Pattern',
 ]
 
-const PROMPT = `These photos all show the SAME single menswear garment or accessory being cataloged for a personal wardrobe app. Some photos may be close-ups of brand labels, size tags, or fabric — read any visible text on them carefully. Respond with ONLY a JSON object (no code fences, no commentary):
+const PROMPT = `These photos all show the SAME single menswear garment or accessory being cataloged for a personal wardrobe app. Some photos may be close-ups of brand labels, size tags, or fabric — read any visible text on them carefully. Respond with ONLY a JSON object (no code fences, no commentary). Fill the fields IN ORDER — work out the color carefully in "color_analysis" BEFORE committing to "color":
 {
+  "color_analysis": "1-2 sentences: what part of the image is the garment (vs background/floor/hanger), what the lighting is doing to the apparent color, and what the garment's TRUE color is",
   "name": "short descriptive name, e.g. 'Navy chalk-stripe suit' or 'Brown suede loafers'",
   "category": "one of: ${CATEGORIES.join(', ')}",
-  "color": "the dominant color, one of: ${COLORS.join(', ')}",
+  "color": "the garment's true dominant color, one of: ${COLORS.join(', ')}",
   "pattern": "e.g. 'Solid', 'Stripe', 'Check', 'Herringbone', 'Plaid' — or '' if unclear",
   "material": "best guess or from the care label, e.g. 'Wool', 'Cotton', 'Denim', 'Leather' — or '' if unclear",
   "brand": "brand name ONLY if a label/logo is legible in any photo, else ''",
@@ -52,6 +53,7 @@ const PROMPT = `These photos all show the SAME single menswear garment or access
   "formality": "one of: formal, business_casual, casual",
   "warmth": "garment weight — one of: light, mid, warm, all (use 'all' for shoes/accessories)"
 }
+Color guidance: judge color from the garment ONLY — never the background, floor, hanger, or bedding. Compensate for lighting: warm indoor light shifts navy toward black and white toward cream; overexposure washes color out — check shadowed folds and seams for the true hue. Menswear priors: dark tailoring (suits, blazers, dress trousers) is far more often Navy or Charcoal than true Black — any blue undertone in a dark garment means Navy. Distinguish Khaki (yellow-tan) from Tan (brown-tan), Gray from Charcoal by depth, and Burgundy from Red by darkness. Use 'Multi / Pattern' only when no single color dominates.
 Category guidance: full suits (jacket+trousers shown together) = suit; sport coats alone = blazer; button-front shirts with stiff collars = dress_shirt, softer/patterned casual button-ups = casual_shirt; sneakers = casual_shoes; oxfords/derbies/loafers = dress_shoes. Never invent brand or size — only report what is actually legible.`
 
 Deno.serve(async (req) => {
@@ -84,7 +86,7 @@ Deno.serve(async (req) => {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-5',
-      max_tokens: 400,
+      max_tokens: 600,
       messages: [{
         role: 'user',
         content: [

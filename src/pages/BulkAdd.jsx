@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../App'
 import { analyzePhoto, saveGarment, uploadPhoto } from '../lib/data'
-import { CATEGORIES, categoryById } from '../lib/constants'
+import { CATEGORIES, categoryById, COLORS } from '../lib/constants'
 
 // Bulk cataloging: pick a batch of photos, each becomes its own garment.
 export default function BulkAdd() {
@@ -23,6 +23,7 @@ export default function BulkAdd() {
       preview: URL.createObjectURL(file),
       name: '',
       category: 'casual_shirt',
+      color: '',
       analyzing: true,
       ai: null,
       edited: new Set(),
@@ -51,6 +52,7 @@ export default function BulkAdd() {
             ai: f,
             name: r.edited.has('name') || r.name ? r.name : f.name || '',
             category: r.edited.has('category') ? r.category : f.category || r.category,
+            color: r.edited.has('color') ? r.color : f.color || r.color,
           }
         }))
       } catch (err) {
@@ -87,7 +89,7 @@ export default function BulkAdd() {
           location,
           brand: ai.brand || null,
           size: ai.size || null,
-          color: ai.color || null,
+          color: row.color || ai.color || null,
           pattern: ai.pattern || null,
           material: ai.material || null,
           formality: ai.formality || meta.formality,
@@ -151,18 +153,29 @@ export default function BulkAdd() {
                     onChange={(e) => set(i, 'name', e.target.value)}
                     style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
                   />
-                  <select
-                    value={row.category}
-                    aria-label={`Category for photo ${i + 1}`}
-                    onChange={(e) => set(i, 'category', e.target.value)}
-                    style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
-                  >
-                    {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                  </select>
+                  <div className="form-row">
+                    <select
+                      value={row.category}
+                      aria-label={`Category for photo ${i + 1}`}
+                      onChange={(e) => set(i, 'category', e.target.value)}
+                      style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
+                    >
+                      {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                    <select
+                      value={row.color}
+                      aria-label={`Color for photo ${i + 1}`}
+                      onChange={(e) => set(i, 'color', e.target.value)}
+                      style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
+                    >
+                      <option value="">Color —</option>
+                      {COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
                   {row.analyzing && <span className="muted">✨ Reading the photo…</span>}
                   {!row.analyzing && row.ai && Object.keys(row.ai).length > 0 && (
                     <span className="muted">
-                      ✨ Detected: {[row.ai.brand, row.ai.size, row.ai.color, row.ai.pattern, row.ai.material].filter(Boolean).join(' · ') || 'no extra details'}
+                      ✨ Detected: {[row.ai.brand, row.ai.size, row.ai.pattern, row.ai.material].filter(Boolean).join(' · ') || 'see fields above'}
                     </span>
                   )}
                 </div>

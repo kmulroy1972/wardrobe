@@ -1,6 +1,6 @@
 // Downscale a photo client-side before upload so iPhone shots don't eat
 // storage. Returns a JPEG blob, longest edge <= max.
-export async function processPhoto(file, max = 1200) {
+export async function processPhoto(file, max = 1200, quality = 0.85) {
   const bitmap = await loadImage(file)
   const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
   const w = Math.round(bitmap.width * scale)
@@ -13,14 +13,15 @@ export async function processPhoto(file, max = 1200) {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Could not process the photo'))),
       'image/jpeg',
-      0.85,
+      quality,
     )
   })
 }
 
-// Small base64 JPEG for AI analysis — keeps the request payload light.
-export async function photoToBase64(file, max = 512) {
-  const blob = await processPhoto(file, max)
+// Base64 JPEG for AI analysis — high enough resolution for color and
+// label reading while keeping the payload reasonable.
+export async function photoToBase64(file, max = 896) {
+  const blob = await processPhoto(file, max, 0.9)
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result)
