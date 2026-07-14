@@ -163,15 +163,27 @@ export default function BulkAdd() {
                       {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                     </select>
                     <select
-                      value={row.color}
+                      value={row.customColor ? '__custom__' : (COLORS.includes(row.color) ? row.color : (row.color ? '__custom__' : ''))}
                       aria-label={`Color for photo ${i + 1}`}
-                      onChange={(e) => set(i, 'color', e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') set(i, 'customColor', true)
+                        else { set(i, 'customColor', false); set(i, 'color', e.target.value) }
+                      }}
                       style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
                     >
                       <option value="">Color —</option>
                       {COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
+                      <option value="__custom__">Custom…</option>
                     </select>
                   </div>
+                  {(row.customColor || (row.color && !COLORS.includes(row.color))) && (
+                    <input
+                      aria-label={`Custom color for photo ${i + 1}`} placeholder="Custom color, e.g. Teal"
+                      value={COLORS.includes(row.color) ? '' : row.color}
+                      onChange={(e) => set(i, 'color', e.target.value)}
+                      style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
+                    />
+                  )}
                   {row.analyzing && <span className="muted">✨ Reading the photo…</span>}
                   {!row.analyzing && row.ai && Object.keys(row.ai).length > 0 && (
                     <span className="muted">

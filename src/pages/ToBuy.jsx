@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { addWishlistItem, deleteWishlistItem, listWishlist, updateWishlistItem } from '../lib/data'
 import { CATEGORIES, categoryById, WISHLIST_PRIORITIES } from '../lib/constants'
+import useRefetchOnFocus from '../lib/useRefetchOnFocus'
 
 const BLANK = { name: '', category: '', brand: '', size: '', priority: 'soon', location: 'dc', url: '' }
 
@@ -19,6 +20,10 @@ export default function ToBuy() {
   useEffect(() => {
     listWishlist().then(setItems).catch((e) => setErr(e.message))
   }, [])
+
+  useRefetchOnFocus(useCallback(() => {
+    listWishlist().then(setItems).catch(() => {})
+  }, []))
 
   function set(k, v) {
     setForm((f) => ({ ...f, [k]: v }))

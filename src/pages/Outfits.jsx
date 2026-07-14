@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import FlatLay from '../components/FlatLay'
 import { deleteOutfit, listOutfits } from '../lib/data'
 import { FORMALITY } from '../lib/constants'
+import useRefetchOnFocus from '../lib/useRefetchOnFocus'
 
 export default function Outfits() {
   const [outfits, setOutfits] = useState(null)
@@ -11,6 +12,10 @@ export default function Outfits() {
   useEffect(() => {
     load()
   }, [])
+
+  useRefetchOnFocus(useCallback(() => {
+    listOutfits().then(setOutfits).catch(() => {})
+  }, []))
 
   function load() {
     listOutfits().then(setOutfits).catch((e) => setErr(e.message))

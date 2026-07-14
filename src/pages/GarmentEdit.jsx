@@ -27,6 +27,7 @@ export default function GarmentEdit() {
   const [err, setErr] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [aiNote, setAiNote] = useState(null)
+  const [customColor, setCustomColor] = useState(false)
   // Fields the user (or a prefill) has already set — AI suggestions never overwrite these
   const touched = useRef(new Set(Object.keys(state?.prefill || {})))
 
@@ -235,10 +236,37 @@ export default function GarmentEdit() {
         <div className="form-row">
           <div className="field">
             <label htmlFor="gcolor">Main color</label>
-            <select id="gcolor" value={g.color || ''} onChange={(e) => set('color', e.target.value)}>
-              <option value="">—</option>
-              {COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            {(() => {
+              const isCustom = customColor || (g.color && !COLORS.includes(g.color))
+              return (
+                <>
+                  <select
+                    id="gcolor"
+                    value={isCustom ? '__custom__' : (g.color || '')}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') {
+                        setCustomColor(true)
+                      } else {
+                        setCustomColor(false)
+                        set('color', e.target.value)
+                      }
+                    }}
+                  >
+                    <option value="">—</option>
+                    {COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    <option value="__custom__">Custom…</option>
+                  </select>
+                  {isCustom && (
+                    <input
+                      aria-label="Custom color" placeholder="e.g. Teal, Heather gray"
+                      value={COLORS.includes(g.color) ? '' : (g.color || '')}
+                      onChange={(e) => set('color', e.target.value)}
+                      style={{ marginTop: 6 }}
+                    />
+                  )}
+                </>
+              )
+            })()}
           </div>
           <div className="field">
             <label htmlFor="gpat">Pattern</label>

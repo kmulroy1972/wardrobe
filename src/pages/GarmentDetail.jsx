@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import GarmentThumb from '../components/GarmentThumb'
 import { deleteGarment, getGarment, markWorn } from '../lib/data'
 import { categoryById, FORMALITY, LOCATIONS, STATUSES, WARMTH } from '../lib/constants'
+import useRefetchOnFocus from '../lib/useRefetchOnFocus'
 
 const label = (list, id) => list.find((x) => x.id === id)?.label || id
 
@@ -17,6 +18,10 @@ export default function GarmentDetail() {
   useEffect(() => {
     getGarment(id).then(setG).catch((e) => setErr(e.message))
   }, [id])
+
+  useRefetchOnFocus(useCallback(() => {
+    getGarment(id).then(setG).catch(() => {})
+  }, [id]))
 
   async function wearToday() {
     try {

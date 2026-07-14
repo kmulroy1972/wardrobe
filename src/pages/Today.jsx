@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import WeatherCard from '../components/WeatherCard'
 import OutfitSuggestion from '../components/OutfitSuggestion'
 import { fetchForecast } from '../lib/weather'
 import { listGarments, listWishlist } from '../lib/data'
+import useRefetchOnFocus from '../lib/useRefetchOnFocus'
 import { recommendOutfits } from '../lib/outfitEngine'
 import { CITIES } from '../lib/config'
 
@@ -25,6 +26,13 @@ export default function Today() {
       .then((items) => setToBuyCount(items.filter((i) => i.status !== 'purchased').length))
       .catch(() => {})
   }, [])
+
+  useRefetchOnFocus(useCallback(() => {
+    listGarments().then(setGarments).catch(() => {})
+    listWishlist()
+      .then((items) => setToBuyCount(items.filter((i) => i.status !== 'purchased').length))
+      .catch(() => {})
+  }, []))
 
   const today = new Date()
   const isWeekend = today.getDay() === 0 || today.getDay() === 6

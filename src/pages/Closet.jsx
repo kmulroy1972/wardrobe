@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import GarmentThumb from '../components/GarmentThumb'
 import { deleteGarment, listGarments } from '../lib/data'
 import { CATEGORIES, categoryById, LOCATIONS } from '../lib/constants'
+import useRefetchOnFocus from '../lib/useRefetchOnFocus'
 
 function CardInner({ g }) {
   return (
@@ -36,6 +37,13 @@ export default function Closet() {
   useEffect(() => {
     listGarments().then(setGarments).catch((e) => setErr(e.message))
   }, [])
+
+  // Keep the list fresh when returning to the app — but never mid-selection
+  const selectModeRef = useRef(false)
+  useEffect(() => { selectModeRef.current = selectMode }, [selectMode])
+  useRefetchOnFocus(useCallback(() => {
+    if (!selectModeRef.current) listGarments().then(setGarments).catch(() => {})
+  }, []))
 
   function toggleSelect(id) {
     setSelected((s) => {
