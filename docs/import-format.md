@@ -46,12 +46,17 @@ folder; no extra or missing files.
 | `image` | yes | exact filename in the folder |
 | `name` | yes | short descriptive name |
 | `category` | yes | `suit, blazer, dress_shirt, casual_shirt, polo, t_shirt, sweater, dress_pants, chinos, jeans, shorts, dress_shoes, casual_shoes, boots, outerwear, tie, belt, pocket_square, scarf, hat, gloves, watch, cufflinks, socks, bag, accessory` |
-| `location` | yes | `dc` \| `howell` |
-| `formality` | yes | `formal` \| `business_casual` \| `casual` |
-| `warmth` | yes | `light` \| `mid` \| `warm` \| `all` (shoes/accessories → `all`) |
+| `location` | no | `dc` \| `howell` \| `""` — blanks default to `dc` at import (flagged in the report) |
+| `formality` | no | `formal` \| `business_casual` \| `casual` \| `""` — blanks default to the category's standard at import |
+| `warmth` | no | `light` \| `mid` \| `warm` \| `all` \| `""` — blanks default to the category's standard at import |
 | `color` | no | preferred: the app's color list; free text allowed |
-| `brand`,`size`,`pattern`,`material`,`notes`,`fit_notes` | no | free text, `""` if unknown; record sizes verbatim |
+| `brand`,`size`,`pattern`,`material`,`notes`,`fit_notes` | no | free text, `""` if unknown; record sizes verbatim; never invent |
 | `status` | no | `active` (default) \| `laundry` \| `tailor` \| `archived` |
+
+Source-specific note (Proper Cloth pass, 2026-07): data comes from Kyle's
+propercloth.com order history; fabric details go in `notes`; suit images show
+jacket + trousers together, retail product style, no model; prefer the site's
+actual product/fabric imagery over generated images.
 
 ## Import procedure (for the assistant)
 
