@@ -2,6 +2,8 @@
 // garment (including brand/size label close-ups) and returns catalog fields.
 // Key resolution: env ANTHROPIC_API_KEY, else the private_settings table.
 
+import { resolveAnthropicKey } from '../_shared/anthropic-key.ts'
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -12,21 +14,6 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
-
-async function getKey(): Promise<string | null> {
-  const envKey = Deno.env.get('ANTHROPIC_API_KEY')
-  if (envKey) return envKey
-  const url = Deno.env.get('SUPABASE_URL')
-  const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (!url || !service) return null
-  const res = await fetch(`${url}/rest/v1/private_settings?select=anthropic_api_key&limit=1`, {
-    headers: { apikey: service, Authorization: `Bearer ${service}` },
-  })
-  if (!res.ok) return null
-  const rows = await res.json()
-  const key = rows?.[0]?.anthropic_api_key
-  return typeof key === 'string' && key.trim() ? key.trim() : null
-}
 
 const CATEGORIES = [
   'suit', 'blazer', 'dress_shirt', 'casual_shirt', 'polo', 't_shirt', 'sweater',
@@ -58,9 +45,15 @@ Category guidance: full suits (jacket+trousers shown together) = suit; sport coa
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
-  const key = await getKey()
-  if (!key) return json({ error: 'no_key' })
+  const keyResult = await resolveAnthropicKey(req)
+  if ('error' in keyResult) {
+    if (keyResult.error === 'unauthorized') return json({ error: 'unauthorized' }, 401)
+    if (keyResult.error === 'lookup_failed') return json({ error: 'key_lookup_failed' }, 502)
+    return json({ error: 'no_key' })
+  }
+  const key = keyResult.key
 
   let payload
   try {

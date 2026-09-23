@@ -183,11 +183,11 @@ export async function analyzePhoto(files) {
 export async function aiKeyIsSet(userId) {
   const { data, error } = await supabase
     .from('private_settings')
-    .select('user_id, anthropic_api_key')
+    .select('user_id')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw error
-  return Boolean(data?.anthropic_api_key)
+  return Boolean(data)
 }
 
 export async function saveAiKey(userId, key) {
