@@ -157,12 +157,22 @@ const SHORT_NAMES = {
 }
 const shortName = (g) => SHORT_NAMES[g.category] || categoryById(g.category).label.toLowerCase()
 
-export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
+function diversityKey(outfit) {
+  const outer = outfit.find((item) => ['suit', 'jacket'].includes(item.slot))
+  const top = outfit.find((item) => item.slot === 'top')
+  const bottom = outfit.find((item) => item.slot === 'bottom')
+  return `${outer?.g.id || ''}|${top?.g.id || ''}|${bottom?.g.id || ''}`
+}
+
+export function recommendOutfits({ garments, occasion, weather, count = 3, constraints = {} }) {
   const wBand = band(weather?.hi ?? 68)
   const rain = (weather?.precip ?? 0) >= 50
   const pool = garments.filter((g) => g.status === 'active')
+  const requiredSlots = new Set(constraints.requiredSlots || [])
+  const excludedSlots = new Set(constraints.excludedSlots || [])
 
-  const catMap = OCCASION_CATEGORIES[occasion]
+  const catMap = { ...OCCASION_CATEGORIES[occasion] }
+  if (requiredSlots.has('jacket') && !catMap.jacket) catMap.jacket = ['blazer']
   const bySlot = {}
   for (const [slot, cats] of Object.entries(catMap)) {
     bySlot[slot] = pool
@@ -181,7 +191,23 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
   const coldAccessories = pool.filter((g) => ['scarf', 'gloves', 'hat'].includes(g.category))
 
   // Formal prefers a full suit; separates are the fallback
-  const useSuit = occasion === 'formal' && (bySlot.suit || []).length > 0
+  const useSuit = occasion === 'formal'
+    && !requiredSlots.has('jacket')
+    && !excludedSlots.has('suit')
+    && (bySlot.suit || []).length > 0
+
+  const unmet = [...requiredSlots].filter((slot) => (
+    excludedSlots.has(slot) || !(bySlot[slot] || []).length
+  ))
+  if (unmet.length > 0) {
+    return {
+      band: wBand,
+      rain,
+      outfits: [],
+      missing: [...new Set([...missingSlots(bySlot, occasion, useSuit), ...unmet])],
+      unmet,
+    }
+  }
 
   const combos = []
   const tops = bySlot.top || []
@@ -189,7 +215,11 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
   const shoes = bySlot.shoes || []
   const jackets = useSuit ? bySlot.suit : bySlot.jacket && bySlot.jacket.length ? bySlot.jacket : [null]
   const wantJacket = occasion === 'formal' || (occasion === 'business_casual' && (wBand === 'cool' || wBand === 'cold'))
-  const jacketOptions = occasion === 'formal' ? jackets : wantJacket && jackets[0] ? jackets : [null, ...jackets.filter(Boolean)]
+  let jacketOptions
+  if (excludedSlots.has('jacket')) jacketOptions = [null]
+  else if (requiredSlots.has('jacket')) jacketOptions = jackets.filter(Boolean)
+  else if (occasion === 'formal' || (wantJacket && jackets[0])) jacketOptions = jackets
+  else jacketOptions = [null, ...jackets.filter(Boolean)]
 
   for (const j of jacketOptions.slice(0, 4)) {
     for (const t of tops.slice(0, 4)) {
@@ -202,20 +232,23 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
           outfit.push({ slot: 'shoes', g: sh.g })
 
           // Cold-weather knit layer when available (not over a formal suit)
-          if ((wBand === 'cool' || wBand === 'cold') && bySlot.layer?.length && !useSuit) {
+          if (!excludedSlots.has('layer') && (wBand === 'cool' || wBand === 'cold') && bySlot.layer?.length && !useSuit) {
             outfit.push({ slot: 'layer', g: bySlot.layer[0].g })
           }
-          if (occasion === 'formal' && bySlot.tie?.length) outfit.push({ slot: 'tie', g: bySlot.tie[0].g })
-          if (bySlot.belt?.length && (b || j)) outfit.push({ slot: 'belt', g: bySlot.belt[0].g })
-          if (occasion === 'formal' && bySlot.accessory?.length) {
+          if (!excludedSlots.has('tie') && occasion === 'formal' && bySlot.tie?.length) outfit.push({ slot: 'tie', g: bySlot.tie[0].g })
+          if (!excludedSlots.has('belt') && bySlot.belt?.length && (b || j)) outfit.push({ slot: 'belt', g: bySlot.belt[0].g })
+          if (!excludedSlots.has('accessory') && occasion === 'formal' && bySlot.accessory?.length) {
             outfit.push({ slot: 'accessory', g: bySlot.accessory[0].g })
           }
-          if ((wBand === 'cold' || (wBand === 'cool' && rain)) && outers.length) {
+          if (!excludedSlots.has('outer') && (wBand === 'cold' || (wBand === 'cool' && rain)) && outers.length) {
             outfit.push({ slot: 'outer', g: outers[0].g })
           }
-          if (wBand === 'cold' && coldAccessories.length) {
+          if (!excludedSlots.has('accessory') && wBand === 'cold' && coldAccessories.length) {
             outfit.push({ slot: 'accessory', g: coldAccessories[0] })
           }
+
+          if (outfit.some(({ slot }) => excludedSlots.has(slot))) continue
+          if ([...requiredSlots].some((slot) => !outfit.some((item) => item.slot === slot))) continue
 
           let score = outfit.reduce((acc, { g }) => acc + garmentScore(g, occasion, wBand), 0) / outfit.length
           score += pairScore(outfit)
@@ -233,8 +266,7 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
   const usedAnchors = new Set()
   for (const c of combos) {
     const anchor = c.outfit.find((o) => ['suit', 'jacket', 'top'].includes(o.slot))
-    const bottomItem = c.outfit.find((o) => o.slot === 'bottom')
-    const key = `${anchor?.g.id}|${bottomItem?.g.id}`
+    const key = diversityKey(c.outfit)
     if (picked.some((p) => p.key === key)) continue
     const anchorId = anchor?.g.id
     if (usedAnchors.has(anchorId) && picked.length < combos.length - 1) continue
@@ -245,9 +277,7 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
   // Backfill if the diversity rule left us short
   for (const c of combos) {
     if (picked.length >= count) break
-    const anchor = c.outfit.find((o) => ['suit', 'jacket', 'top'].includes(o.slot))
-    const bottomItem = c.outfit.find((o) => o.slot === 'bottom')
-    const key = `${anchor?.g.id}|${bottomItem?.g.id}`
+    const key = diversityKey(c.outfit)
     if (!picked.some((p) => p.key === key)) picked.push({ key, ...c })
   }
 
@@ -260,6 +290,7 @@ export function recommendOutfits({ garments, occasion, weather, count = 3 }) {
       tips: buildTips({ outfit: p.outfit, occasion, wBand, rain }),
     })),
     missing: missingSlots(bySlot, occasion, useSuit),
+    unmet: [],
   }
 }
 

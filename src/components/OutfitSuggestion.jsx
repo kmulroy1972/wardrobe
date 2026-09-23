@@ -3,7 +3,7 @@ import FlatLay from './FlatLay'
 import { categoryById, SLOT_LABELS } from '../lib/constants'
 import { saveOutfit } from '../lib/data'
 
-export default function OutfitSuggestion({ outfit, occasion, location }) {
+export default function OutfitSuggestion({ outfit, occasion, location, onEdit }) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState(null)
@@ -31,9 +31,16 @@ export default function OutfitSuggestion({ outfit, occasion, location }) {
     <div className="card fade-in">
       <div className="spread">
         <h3>{outfit.name}</h3>
-        <button className="btn small ghost" onClick={save} disabled={saving || saved}>
-          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save outfit'}
-        </button>
+        <div className="row" style={{ gap: 6 }}>
+          {onEdit && (
+            <button type="button" className="btn small ghost" onClick={() => onEdit(outfit)}>
+              Edit outfit
+            </button>
+          )}
+          <button type="button" className="btn small ghost" onClick={save} disabled={saving || saved}>
+            {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save outfit'}
+          </button>
+        </div>
       </div>
       <div style={{ margin: '10px 0' }}>
         <FlatLay items={outfit.items} />
