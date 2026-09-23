@@ -33,11 +33,9 @@ export async function deleteGarment(garment) {
   // Database state is authoritative. Remove the row first so a failed delete
   // (for example, because a saved outfit still references it) never destroys
   // photos that the catalog still needs.
-  if (urls.length) {
-    await removePhotos(urls).catch((photoError) => {
-      console.warn('Garment deleted, but its stored photos could not be removed.', photoError)
-    })
-  }
+  await removePhotos(urls).catch((photoError) => {
+    console.warn('Garment deleted, but its stored photos could not be removed.', photoError)
+  })
 }
 
 export async function markWorn(garment) {
