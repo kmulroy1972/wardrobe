@@ -39,7 +39,9 @@ describe('resolveAnthropicKey', () => {
   })
 
   it('returns the shared environment key only after authenticating the caller', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(response({ id: 'user-1' }))
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response({ id: 'user-1' }))
+      .mockResolvedValueOnce(response([]))
 
     const result = await resolveAnthropicKey(
       request(),
@@ -51,7 +53,24 @@ describe('resolveAnthropicKey', () => {
     )
 
     expect(result).toEqual({ key: 'shared-key' })
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('prefers the authenticated user key over the shared fallback', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response({ id: 'user-1' }))
+      .mockResolvedValueOnce(response([{ anthropic_api_key: ' personal-key ' }]))
+
+    const result = await resolveAnthropicKey(
+      request(),
+      dependencies({
+        SUPABASE_URL: 'https://project.supabase.co',
+        SUPABASE_ANON_KEY: 'anon',
+        ANTHROPIC_API_KEY: 'shared-key',
+      }, fetchImpl),
+    )
+
+    expect(result).toEqual({ key: 'personal-key' })
   })
 
   it('looks up a user-specific key with the caller session and user id', async () => {
@@ -67,7 +86,10 @@ describe('resolveAnthropicKey', () => {
     expect(result).toEqual({ key: 'personal-key' })
     expect(fetchImpl).toHaveBeenLastCalledWith(
       'https://project.supabase.co/rest/v1/private_settings?select=anthropic_api_key&user_id=eq.user%2B1&limit=1',
-      { headers: { apikey: 'anon', Authorization: 'Bearer valid-token' } },
+      expect.objectContaining({
+        headers: { apikey: 'anon', Authorization: 'Bearer valid-token' },
+        signal: expect.any(AbortSignal),
+      }),
     )
   })
 

@@ -75,6 +75,26 @@ export async function removePhotos(publicUrls) {
   }
 }
 
+export async function reconcileFailedGarmentSave(garmentId, uploadedUrls) {
+  if (!garmentId || uploadedUrls.length === 0) return null
+
+  const { data, error } = await supabase
+    .from('garments')
+    .select('id, photo_url, photos')
+    .eq('id', garmentId)
+    .maybeSingle()
+
+  // A failed verification is still ambiguous. Preserve the uploads instead of
+  // risking a catalog row that points at deleted objects.
+  if (error) return null
+
+  const referenced = new Set([data?.photo_url, ...(data?.photos || [])].filter(Boolean))
+  const unreferenced = uploadedUrls.filter((url) => !referenced.has(url))
+  if (unreferenced.length) await removePhotos(unreferenced)
+
+  return data && uploadedUrls.every((url) => referenced.has(url)) ? data : null
+}
+
 export async function listOutfits() {
   const { data, error } = await supabase
     .from('outfits')
@@ -99,11 +119,25 @@ export async function saveOutfit({ name, occasion, location, notes, items }) {
   }))
   const { error: e2 } = await supabase.from('outfit_items').insert(rows)
   if (e2) {
-    // Supabase's two client calls are not one transaction. Compensate for a
-    // failed item insert so an empty outfit header is not left behind.
-    const { error: cleanupError } = await supabase.from('outfits').delete().eq('id', outfit.id)
-    if (cleanupError) {
-      throw new Error(`${e2.message || 'Could not save outfit'}; cleanup also failed: ${cleanupError.message}`)
+    const { data: savedItems, error: verificationError } = await supabase
+      .from('outfit_items')
+      .select('garment_id, slot, position')
+      .eq('outfit_id', outfit.id)
+
+    const insertCommitted = !verificationError && savedItems?.length === rows.length && rows.every(
+      (row) => savedItems.some((saved) => (
+        saved.garment_id === row.garment_id && saved.slot === row.slot && saved.position === row.position
+      )),
+    )
+    if (insertCommitted) return outfit
+
+    // Only delete the header after a successful read proves that no item rows
+    // committed. A failed verification is ambiguous, so preserve recoverable data.
+    if (!verificationError && savedItems?.length === 0) {
+      const { error: cleanupError } = await supabase.from('outfits').delete().eq('id', outfit.id)
+      if (cleanupError) {
+        throw new Error(`${e2.message || 'Could not save outfit'}; cleanup also failed: ${cleanupError.message}`)
+      }
     }
     throw e2
   }

@@ -16,7 +16,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { aiKeyIsSet, deleteGarment, removePhotos, saveOutfit } from './data'
+import { aiKeyIsSet, deleteGarment, reconcileFailedGarmentSave, removePhotos, saveOutfit } from './data'
 
 describe('aiKeyIsSet', () => {
   beforeEach(() => {
@@ -73,10 +73,71 @@ describe('garment photo integrity', () => {
     expect(mocks.remove).not.toHaveBeenCalled()
   })
 
+  it('keeps a successful row deletion successful when photo cleanup fails', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mocks.from.mockReturnValue({
+      delete: () => ({ eq: vi.fn().mockResolvedValue({ error: null }) }),
+    })
+    mocks.remove.mockResolvedValue({ error: new Error('storage unavailable') })
+
+    await expect(deleteGarment({ id: 'garment-1', photo_url: '/garments/user/cover.jpg' }))
+      .resolves.toBeUndefined()
+    expect(warning).toHaveBeenCalledWith(
+      'Garment deleted, but its stored photos could not be removed.',
+      expect.any(Error),
+    )
+    warning.mockRestore()
+  })
+
   it('surfaces storage cleanup failures to callers that are rolling back uploads', async () => {
     mocks.remove.mockResolvedValue({ error: new Error('storage unavailable') })
 
     await expect(removePhotos(['/garments/user/photo.jpg'])).rejects.toThrow('storage unavailable')
+  })
+
+  it('preserves uploads that a committed garment row references', async () => {
+    const committed = {
+      id: 'garment-1',
+      photo_url: '/garments/user/cover.jpg',
+      photos: ['/garments/user/detail.jpg'],
+    }
+    const maybeSingle = vi.fn().mockResolvedValue({ data: committed, error: null })
+    mocks.from.mockReturnValue({
+      select: () => ({ eq: () => ({ maybeSingle }) }),
+    })
+
+    await expect(reconcileFailedGarmentSave('garment-1', [
+      '/garments/user/cover.jpg',
+      '/garments/user/detail.jpg',
+    ])).resolves.toEqual(committed)
+    expect(mocks.remove).not.toHaveBeenCalled()
+  })
+
+  it('removes only uploads confirmed to be unreferenced', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: 'garment-1', photo_url: '/garments/user/cover.jpg', photos: [] },
+      error: null,
+    })
+    mocks.from.mockReturnValue({
+      select: () => ({ eq: () => ({ maybeSingle }) }),
+    })
+
+    await expect(reconcileFailedGarmentSave('garment-1', [
+      '/garments/user/cover.jpg',
+      '/garments/user/orphan.jpg',
+    ])).resolves.toBeNull()
+    expect(mocks.remove).toHaveBeenCalledWith(['user/orphan.jpg'])
+  })
+
+  it('preserves uploads when reconciliation also fails', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: new Error('network unavailable') })
+    mocks.from.mockReturnValue({
+      select: () => ({ eq: () => ({ maybeSingle }) }),
+    })
+
+    await expect(reconcileFailedGarmentSave('garment-1', ['/garments/user/photo.jpg']))
+      .resolves.toBeNull()
+    expect(mocks.remove).not.toHaveBeenCalled()
   })
 })
 
@@ -90,8 +151,14 @@ describe('saveOutfit', () => {
     const cleanupEq = vi.fn().mockResolvedValue({ error: null })
     let outfitCalls = 0
 
+    let itemCalls = 0
     mocks.from.mockImplementation((table) => {
-      if (table === 'outfit_items') return { insert: vi.fn().mockResolvedValue({ error: itemError }) }
+      if (table === 'outfit_items' && itemCalls++ === 0) {
+        return { insert: vi.fn().mockResolvedValue({ error: itemError }) }
+      }
+      if (table === 'outfit_items') {
+        return { select: () => ({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) }) }
+      }
       if (table === 'outfits' && outfitCalls++ === 0) {
         return {
           insert: () => ({
@@ -113,5 +180,116 @@ describe('saveOutfit', () => {
     })).rejects.toThrow('item insert failed')
 
     expect(cleanupEq).toHaveBeenCalledWith('id', 'outfit-1')
+  })
+
+  it('accepts an outfit item insert that committed before its response was lost', async () => {
+    const itemError = new Error('response lost')
+    let outfitCalls = 0
+    let itemCalls = 0
+
+    mocks.from.mockImplementation((table) => {
+      if (table === 'outfit_items' && itemCalls++ === 0) {
+        return { insert: vi.fn().mockResolvedValue({ error: itemError }) }
+      }
+      if (table === 'outfit_items') {
+        return {
+          select: () => ({
+            eq: vi.fn().mockResolvedValue({
+              data: [{ garment_id: 'garment-1', slot: 'top', position: 0 }],
+              error: null,
+            }),
+          }),
+        }
+      }
+      if (table === 'outfits' && outfitCalls++ === 0) {
+        return {
+          insert: () => ({
+            select: () => ({
+              single: vi.fn().mockResolvedValue({ data: { id: 'outfit-1' }, error: null }),
+            }),
+          }),
+        }
+      }
+      throw new Error('outfit header must not be deleted')
+    })
+
+    await expect(saveOutfit({
+      name: 'Recovered outfit',
+      occasion: 'casual',
+      location: 'dc',
+      notes: '',
+      items: [{ slot: 'top', g: { id: 'garment-1' } }],
+    })).resolves.toEqual({ id: 'outfit-1' })
+  })
+
+  it('preserves the outfit header when verification is ambiguous', async () => {
+    const itemError = new Error('response lost')
+    let outfitCalls = 0
+    let itemCalls = 0
+
+    mocks.from.mockImplementation((table) => {
+      if (table === 'outfit_items' && itemCalls++ === 0) {
+        return { insert: vi.fn().mockResolvedValue({ error: itemError }) }
+      }
+      if (table === 'outfit_items') {
+        return {
+          select: () => ({
+            eq: vi.fn().mockResolvedValue({ data: null, error: new Error('verification unavailable') }),
+          }),
+        }
+      }
+      if (table === 'outfits' && outfitCalls++ === 0) {
+        return {
+          insert: () => ({
+            select: () => ({
+              single: vi.fn().mockResolvedValue({ data: { id: 'outfit-1' }, error: null }),
+            }),
+          }),
+        }
+      }
+      throw new Error('outfit header must not be deleted')
+    })
+
+    await expect(saveOutfit({
+      name: 'Ambiguous outfit',
+      occasion: 'casual',
+      location: 'dc',
+      notes: '',
+      items: [{ slot: 'top', g: { id: 'garment-1' } }],
+    })).rejects.toThrow('response lost')
+  })
+
+  it('reports both the item and cleanup errors when compensation fails', async () => {
+    const itemError = new Error('item insert failed')
+    const cleanupError = new Error('cleanup failed')
+    let outfitCalls = 0
+    let itemCalls = 0
+
+    mocks.from.mockImplementation((table) => {
+      if (table === 'outfit_items' && itemCalls++ === 0) {
+        return { insert: vi.fn().mockResolvedValue({ error: itemError }) }
+      }
+      if (table === 'outfit_items') {
+        return { select: () => ({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) }) }
+      }
+      if (table === 'outfits' && outfitCalls++ === 0) {
+        return {
+          insert: () => ({
+            select: () => ({
+              single: vi.fn().mockResolvedValue({ data: { id: 'outfit-1' }, error: null }),
+            }),
+          }),
+        }
+      }
+      return { delete: () => ({ eq: vi.fn().mockResolvedValue({ error: cleanupError }) }) }
+    })
+
+    await expect(saveOutfit({
+      name: 'Test outfit',
+      occasion: 'casual',
+      location: 'dc',
+      notes: '',
+      items: [{ slot: 'top', g: { id: 'garment-1' } }],
+    })).rejects.toThrow('item insert failed; cleanup also failed: cleanup failed')
   })
 })

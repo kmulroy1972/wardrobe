@@ -1,7 +1,7 @@
 // AI stylist: answers free-form wardrobe questions using the full catalog,
 // saved outfits, shopping list, wear history, and both cities' weather.
-// The Anthropic key comes from the ANTHROPIC_API_KEY secret if set, else
-// from the private_settings table (pasted by the user on the Profile page).
+// The Anthropic key comes from the authenticated user's private_settings row,
+// with ANTHROPIC_API_KEY as a single-owner deployment fallback.
 
 import { resolveAnthropicKey } from '../_shared/anthropic-key.ts'
 

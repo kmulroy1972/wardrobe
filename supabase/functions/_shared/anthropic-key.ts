@@ -12,6 +12,8 @@ const defaults: Dependencies = {
   fetch,
 }
 
+const LOOKUP_TIMEOUT_MS = 8_000
+
 export async function resolveAnthropicKey(
   req: Request,
   dependencies: Dependencies = defaults,
@@ -27,6 +29,7 @@ export async function resolveAnthropicKey(
   try {
     authResponse = await dependencies.fetch(`${url}/auth/v1/user`, {
       headers: { apikey: anonKey, Authorization: authorization },
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
     })
   } catch {
     return { error: 'lookup_failed' }
@@ -36,9 +39,6 @@ export async function resolveAnthropicKey(
   const user = await authResponse.json().catch(() => null)
   if (!user?.id || typeof user.id !== 'string') return { error: 'unauthorized' }
 
-  const sharedKey = dependencies.env('ANTHROPIC_API_KEY')?.trim()
-  if (sharedKey) return { key: sharedKey }
-
   const settingsUrl =
     `${url}/rest/v1/private_settings?select=anthropic_api_key` +
     `&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
@@ -46,6 +46,7 @@ export async function resolveAnthropicKey(
   try {
     settingsResponse = await dependencies.fetch(settingsUrl, {
       headers: { apikey: anonKey, Authorization: authorization },
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
     })
   } catch {
     return { error: 'lookup_failed' }
@@ -54,7 +55,8 @@ export async function resolveAnthropicKey(
 
   const rows = await settingsResponse.json().catch(() => null)
   const key = rows?.[0]?.anthropic_api_key
-  return typeof key === 'string' && key.trim()
-    ? { key: key.trim() }
-    : { error: 'not_configured' }
+  if (typeof key === 'string' && key.trim()) return { key: key.trim() }
+
+  const sharedKey = dependencies.env('ANTHROPIC_API_KEY')?.trim()
+  return sharedKey ? { key: sharedKey } : { error: 'not_configured' }
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../App'
-import { analyzePhoto, removePhotos, saveGarment, uploadPhoto } from '../lib/data'
+import { analyzePhoto, reconcileFailedGarmentSave, saveGarment, uploadPhoto } from '../lib/data'
 import { CATEGORIES, categoryById, COLORS } from '../lib/constants'
 
 // Bulk cataloging: pick a batch of photos, each becomes its own garment.
@@ -76,15 +76,18 @@ export default function BulkAdd() {
     setBusy(true)
     setErr(null)
     setDone(0)
+    let completed = 0
+    const total = rows.length
     try {
-      let n = 0
       for (const row of rows) {
         const meta = categoryById(row.category)
         // AI details apply only while the category still matches what the AI saw
         const ai = row.ai && row.ai.category === row.category ? row.ai : {}
+        const garmentId = crypto.randomUUID()
         const photo_url = await uploadPhoto(user.id, row.file)
         try {
           await saveGarment({
+            id: garmentId,
             name: row.name.trim() || ai.name || meta.label,
             category: row.category,
             location,
@@ -100,14 +103,16 @@ export default function BulkAdd() {
             photos: [],
           })
         } catch (saveError) {
-          await removePhotos([photo_url]).catch(() => {})
-          throw saveError
+          const recovered = await reconcileFailedGarmentSave(garmentId, [photo_url]).catch(() => null)
+          if (!recovered) throw saveError
         }
-        setDone(++n)
+        completed += 1
+        setDone(completed)
+        setRows((current) => current.filter((candidate) => candidate.preview !== row.preview))
       }
       navigate('/closet', { replace: true })
     } catch (e) {
-      setErr(`${e.message} — ${done} of ${rows.length} saved so far.`)
+      setErr(`${e.message} — ${completed} of ${total} saved so far.`)
       setBusy(false)
     }
   }
@@ -206,7 +211,9 @@ export default function BulkAdd() {
           {err && <p className="form-msg">{err}</p>}
           <div className="row">
             <button className="btn" onClick={saveAll} disabled={busy}>
-              {busy ? `Saving ${done + 1} of ${rows.length}…` : `Add ${rows.length} garment${rows.length === 1 ? '' : 's'} to the closet`}
+              {busy
+                ? `Saving ${Math.min(done + 1, done + rows.length)} of ${done + rows.length}…`
+                : `Add ${rows.length} garment${rows.length === 1 ? '' : 's'} to the closet`}
             </button>
             <button type="button" className="btn ghost" onClick={() => navigate(-1)} disabled={busy}>Cancel</button>
           </div>

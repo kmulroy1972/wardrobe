@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../App'
-import { analyzePhoto, deleteWishlistItem, getGarment, removePhotos, saveGarment, uploadPhoto } from '../lib/data'
+import { analyzePhoto, deleteWishlistItem, getGarment, reconcileFailedGarmentSave, removePhotos, saveGarment, uploadPhoto } from '../lib/data'
 import { CATEGORIES, categoryById, COLORS, FORMALITY, LOCATIONS, STATUSES, WARMTH } from '../lib/constants'
 
 const BLANK = {
@@ -117,6 +117,7 @@ export default function GarmentEdit() {
     setBusy(true)
     setErr(null)
     const uploaded = []
+    const targetId = id || crypto.randomUUID()
     try {
       for (const p of newPhotos) uploaded.push(await uploadPhoto(user.id, p.file))
       const pending = [...uploaded]
@@ -127,6 +128,7 @@ export default function GarmentEdit() {
       }
       gallery.push(...pending)
       const fields = {
+        ...(!id ? { id: targetId } : {}),
         name: g.name.trim(), category: g.category, brand: g.brand || null, size: g.size || null,
         color: g.color || null, pattern: g.pattern || null, material: g.material || null,
         location: g.location, formality: g.formality, warmth: g.warmth, status: g.status,
@@ -139,7 +141,11 @@ export default function GarmentEdit() {
       if (state?.wishlistId) await deleteWishlistItem(state.wishlistId).catch(() => {})
       navigate(`/closet/${saved.id}`, { replace: true })
     } catch (e2) {
-      if (uploaded.length) await removePhotos(uploaded).catch(() => {})
+      const recovered = await reconcileFailedGarmentSave(targetId, uploaded).catch(() => null)
+      if (recovered) {
+        navigate(`/closet/${recovered.id}`, { replace: true })
+        return
+      }
       setErr(e2.message)
       setBusy(false)
     }

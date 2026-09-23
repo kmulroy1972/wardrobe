@@ -1,6 +1,7 @@
 // Garment photo analysis: Claude vision reads one or more photos of a single
 // garment (including brand/size label close-ups) and returns catalog fields.
-// Key resolution: env ANTHROPIC_API_KEY, else the private_settings table.
+// Key resolution: authenticated user's private_settings row, then the shared
+// ANTHROPIC_API_KEY secret as a single-owner fallback.
 
 import { resolveAnthropicKey } from '../_shared/anthropic-key.ts'
 

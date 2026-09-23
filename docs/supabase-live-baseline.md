@@ -26,7 +26,7 @@ All six tables have Row Level Security enabled (not forced).
 
 - `user_id uuid` primary key, not null, foreign key to `auth.users(id)`
 - `display_name text`
-- `height text` default `'4 ft 5 in'`
+- `height text` with a user-specific live default (value intentionally omitted)
 - `fit_notes text`
 - `sizes jsonb` not null, default `{}`
 - `updated_at timestamptz` not null, default `now()`
@@ -121,4 +121,3 @@ is not private.
 
 - Primary-key indexes on all six public tables
 - `garments_user_idx` on `garments (user_id, location, category)`
-
