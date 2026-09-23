@@ -116,15 +116,16 @@ export default function GarmentEdit() {
     e.preventDefault()
     setBusy(true)
     setErr(null)
+    const uploaded = []
     try {
-      const uploaded = []
       for (const p of newPhotos) uploaded.push(await uploadPhoto(user.id, p.file))
+      const pending = [...uploaded]
       let photo_url = g.photo_url || null
       const gallery = (g.photos || []).filter((u) => !removed.includes(u))
-      if (!photo_url && uploaded.length) {
-        photo_url = uploaded.shift()
+      if (!photo_url && pending.length) {
+        photo_url = pending.shift()
       }
-      gallery.push(...uploaded)
+      gallery.push(...pending)
       const fields = {
         name: g.name.trim(), category: g.category, brand: g.brand || null, size: g.size || null,
         color: g.color || null, pattern: g.pattern || null, material: g.material || null,
@@ -138,6 +139,7 @@ export default function GarmentEdit() {
       if (state?.wishlistId) await deleteWishlistItem(state.wishlistId).catch(() => {})
       navigate(`/closet/${saved.id}`, { replace: true })
     } catch (e2) {
+      if (uploaded.length) await removePhotos(uploaded).catch(() => {})
       setErr(e2.message)
       setBusy(false)
     }

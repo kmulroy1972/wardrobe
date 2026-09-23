@@ -28,9 +28,16 @@ export async function saveGarment(fields, id) {
 
 export async function deleteGarment(garment) {
   const urls = [garment.photo_url, ...(garment.photos || [])].filter(Boolean)
-  if (urls.length) await removePhotos(urls)
   const { error } = await supabase.from('garments').delete().eq('id', garment.id)
   if (error) throw error
+  // Database state is authoritative. Remove the row first so a failed delete
+  // (for example, because a saved outfit still references it) never destroys
+  // photos that the catalog still needs.
+  if (urls.length) {
+    await removePhotos(urls).catch((photoError) => {
+      console.warn('Garment deleted, but its stored photos could not be removed.', photoError)
+    })
+  }
 }
 
 export async function markWorn(garment) {
@@ -64,7 +71,10 @@ export async function removePhotos(publicUrls) {
       return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length))
     })
     .filter(Boolean)
-  if (paths.length) await supabase.storage.from('garments').remove(paths)
+  if (paths.length) {
+    const { error } = await supabase.storage.from('garments').remove(paths)
+    if (error) throw error
+  }
 }
 
 export async function listOutfits() {
@@ -90,7 +100,15 @@ export async function saveOutfit({ name, occasion, location, notes, items }) {
     position: i,
   }))
   const { error: e2 } = await supabase.from('outfit_items').insert(rows)
-  if (e2) throw e2
+  if (e2) {
+    // Supabase's two client calls are not one transaction. Compensate for a
+    // failed item insert so an empty outfit header is not left behind.
+    const { error: cleanupError } = await supabase.from('outfits').delete().eq('id', outfit.id)
+    if (cleanupError) {
+      throw new Error(`${e2.message || 'Could not save outfit'}; cleanup also failed: ${cleanupError.message}`)
+    }
+    throw e2
+  }
   return outfit
 }
 

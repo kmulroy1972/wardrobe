@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../App'
-import { analyzePhoto, saveGarment, uploadPhoto } from '../lib/data'
+import { analyzePhoto, removePhotos, saveGarment, uploadPhoto } from '../lib/data'
 import { CATEGORIES, categoryById, COLORS } from '../lib/constants'
 
 // Bulk cataloging: pick a batch of photos, each becomes its own garment.
@@ -83,21 +83,26 @@ export default function BulkAdd() {
         // AI details apply only while the category still matches what the AI saw
         const ai = row.ai && row.ai.category === row.category ? row.ai : {}
         const photo_url = await uploadPhoto(user.id, row.file)
-        await saveGarment({
-          name: row.name.trim() || ai.name || meta.label,
-          category: row.category,
-          location,
-          brand: ai.brand || null,
-          size: ai.size || null,
-          color: row.color || ai.color || null,
-          pattern: ai.pattern || null,
-          material: ai.material || null,
-          formality: ai.formality || meta.formality,
-          warmth: ai.warmth || meta.warmth,
-          status: 'active',
-          photo_url,
-          photos: [],
-        })
+        try {
+          await saveGarment({
+            name: row.name.trim() || ai.name || meta.label,
+            category: row.category,
+            location,
+            brand: ai.brand || null,
+            size: ai.size || null,
+            color: row.color || ai.color || null,
+            pattern: ai.pattern || null,
+            material: ai.material || null,
+            formality: ai.formality || meta.formality,
+            warmth: ai.warmth || meta.warmth,
+            status: 'active',
+            photo_url,
+            photos: [],
+          })
+        } catch (saveError) {
+          await removePhotos([photo_url]).catch(() => {})
+          throw saveError
+        }
         setDone(++n)
       }
       navigate('/closet', { replace: true })
