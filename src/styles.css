@@ -299,6 +299,22 @@ h3 { font-size: 1.05rem; }
   padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 10px;
   background: var(--paper); color: var(--ink-soft); font-size: 0.82rem;
 }
+.stylist-revision-status {
+  padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--bottle) 30%, var(--hairline));
+  border-radius: 10px; background: color-mix(in srgb, var(--bottle) 8%, var(--paper));
+  color: var(--bottle); font-size: 0.84rem; font-weight: 600;
+}
+.stylist-revision-status.needs-input {
+  border-color: color-mix(in srgb, var(--brass) 55%, var(--hairline));
+  background: color-mix(in srgb, var(--brass) 10%, var(--paper)); color: var(--ink);
+}
+.stylist-revise-help {
+  display: grid; gap: 6px; padding: 14px; border: 1px solid var(--hairline);
+  border-radius: 12px; background: var(--paper);
+}
+.stylist-revise-help .prompt-starters { margin: 4px 0 0; }
+.stylist-revise-help small, .stylist-revise-help span { color: var(--ink-soft); }
+.stylist-revision-hint { margin: 7px 2px 0; font-size: 0.76rem; }
 
 .garment-preview-backdrop {
   position: fixed; inset: 0; z-index: 100;

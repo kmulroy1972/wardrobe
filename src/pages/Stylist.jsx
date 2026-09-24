@@ -10,7 +10,8 @@ import { recommendOutfits } from '../lib/outfitEngine'
 import { categoryById, FORMALITY, SLOT_LABELS } from '../lib/constants'
 import { buildStylistQuestion, STYLIST_STARTERS } from '../lib/stylistRequest'
 import { loadStylistConversation, parseStylistResponse, saveStylistConversation } from '../lib/stylistResponse'
-import { buildStylistRecommendations, findLatestOutfitQuestion } from '../lib/stylistRecommendations'
+import { buildLocalRevisionTurn, buildStylistConversationRecommendations } from '../lib/stylistRecommendations'
+import { parseOutfitRequest } from '../lib/outfitRequest'
 
 // A sensible category to shop for when an outfit slot has nothing in it
 const GAP_CATEGORY = {
@@ -151,7 +152,24 @@ export default function Stylist() {
     if (!question || thinking) return
     setDraft('')
     const history = messages.map((m) => ({ role: m.role, content: m.text }))
-    setMessages((ms) => [...ms, { role: 'user', text: question }])
+    const nextMessages = [...messages, { role: 'user', text: question }]
+    const isLocalRevision = Boolean(visualRecommendations) && (
+      parseOutfitRequest(question).isRevision || visualRecommendations.needsClarification
+    )
+    if (isLocalRevision) {
+      const localTurn = buildLocalRevisionTurn({
+        question,
+        messages,
+        garments: garments || [],
+        occasion,
+        location: city,
+        weather: wx?.daily?.[dayIdx],
+        selectedGarment: focusedGarment,
+      })
+      setMessages(localTurn.messages)
+      return
+    }
+    setMessages(nextMessages)
     setThinking(true)
     setAiStatus('idle')
     try {
@@ -210,18 +228,17 @@ export default function Stylist() {
       .filter((g) => g.status === 'active')
       .sort((a, b) => categoryById(a.category).label.localeCompare(categoryById(b.category).label) || a.name.localeCompare(b.name))
   ), [garments])
-  const latestOutfitQuestion = useMemo(() => findLatestOutfitQuestion(messages), [messages])
   const visualRecommendations = useMemo(() => {
-    if (!latestOutfitQuestion || !garments) return null
-    return buildStylistRecommendations({
-      question: latestOutfitQuestion,
+    if (!garments) return null
+    return buildStylistConversationRecommendations({
+      messages,
       garments,
       occasion,
       location: city,
       weather: wx?.daily?.[dayIdx],
       selectedGarment: focusedGarment,
     })
-  }, [latestOutfitQuestion, garments, occasion, city, wx, dayIdx, focusedGarment])
+  }, [messages, garments, occasion, city, wx, dayIdx, focusedGarment])
 
   function selectGarment(id) {
     setSearchParams(id ? { garment: id } : {}, { replace: true })
@@ -367,6 +384,11 @@ export default function Stylist() {
               </h2>
               <p className="muted">Click any garment image to enlarge it. Use “Back to outfit” to return here without losing anything.</p>
             </div>
+            {(visualRecommendations.revisionSummary || visualRecommendations.needsClarification) && (
+              <div className={`stylist-revision-status ${visualRecommendations.needsClarification ? 'needs-input' : ''}`} role="status">
+                {visualRecommendations.needsClarification || visualRecommendations.revisionSummary}
+              </div>
+            )}
             {visualRecommendations.outfits.map((outfit, index) => (
               <OutfitSuggestion
                 key={`${outfit.name}-${index}`}
@@ -383,6 +405,19 @@ export default function Stylist() {
                 The pictured pieces above are still usable now.
               </div>
             )}
+            <div className="stylist-revise-help">
+              <strong>Want to change one piece?</strong>
+              <span>Ask below. Your other pieces will stay in place.</span>
+              <div className="prompt-starters" aria-label="Example outfit changes">
+                <button type="button" className="prompt-chip" onClick={() => setDraft('Use a different shirt for the second night. Keep everything else the same.')}>
+                  Different shirt in outfit 2
+                </button>
+                <button type="button" className="prompt-chip" onClick={() => setDraft('Change the jacket in outfit 1. Keep everything else the same.')}>
+                  Change jacket in outfit 1
+                </button>
+              </div>
+              <small>Name a piece you wore, too—for example, “Replace the Reda jacket; I wore it today.”</small>
+            </div>
           </section>
         )}
         {messages.length > 0 && <p className="muted stylist-saved-note">This conversation stays in this browser tab if you leave and come back.</p>}
@@ -394,6 +429,9 @@ export default function Stylist() {
           />
           <button className="btn" disabled={thinking || !draft.trim() || garments === null || garmentLoadError}>Ask the stylist</button>
         </form>
+        <p className="muted stylist-revision-hint">
+          Already have outfits? Ask for a change in ordinary language, such as “Different shirt in outfit 2.”
+        </p>
         {garmentLoadError && (
           <p className="form-msg" role="alert">
             I couldn’t open your wardrobe, so I won’t guess. <button type="button" className="btn small ghost" onClick={loadGarments}>Try again</button>

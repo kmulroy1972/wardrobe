@@ -39,5 +39,6 @@ describe('Stylist', () => {
     expect(html).toContain('Nothing is saved or changed')
     expect(html).toContain('Open Build an outfit')
     expect(html).toContain('Your answer will name the exact pieces')
+    expect(html).toContain('Already have outfits? Ask for a change in ordinary language')
   })
 })
