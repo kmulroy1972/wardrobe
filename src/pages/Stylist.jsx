@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import GarmentThumb from '../components/GarmentThumb'
+import GarmentPreviewDialog from '../components/GarmentPreviewDialog'
 import OutfitSuggestion from '../components/OutfitSuggestion'
 import { useAuth } from '../App'
 import { addWishlistItem, askStylist, getProfile, listGarments, listOutfits, listWishlist } from '../lib/data'
@@ -65,6 +66,7 @@ export default function Stylist() {
   const [aiStatus, setAiStatus] = useState('idle') // idle | ready | no_key
   const [context, setContext] = useState(null) // outfits/wishlist/weather cache for the chat
   const [contextWarning, setContextWarning] = useState([])
+  const [previewGarment, setPreviewGarment] = useState(null)
   const chatEnd = useRef(null)
 
   const loadGarments = useCallback(async () => {
@@ -197,6 +199,8 @@ export default function Stylist() {
     setSearchParams(id ? { garment: id } : {}, { replace: true })
   }
 
+  const closeGarmentPreview = useCallback(() => setPreviewGarment(null), [])
+
   function renderAiText(text) {
     // Turn [[garment-id]] references into linked chips with the photo
     const parts = text.split(/(\[\[[0-9a-f-]{36}\]\])/g)
@@ -206,10 +210,16 @@ export default function Stylist() {
       const g = garmentById(m[1])
       if (!g) return null
       return (
-        <Link key={i} to={`/closet/${g.id}`} className="garment-chip">
+        <button
+          key={i}
+          type="button"
+          className="garment-chip"
+          onClick={() => setPreviewGarment(g)}
+          aria-label={`Preview ${g.name}`}
+        >
           {g.photo_url && <img src={g.photo_url} alt="" />}
           {g.name}
-        </Link>
+        </button>
       )
     })
   }
@@ -388,6 +398,7 @@ export default function Stylist() {
         </div>
       )}
 
+      <GarmentPreviewDialog garment={previewGarment} onClose={closeGarmentPreview} />
     </div>
   )
 }
