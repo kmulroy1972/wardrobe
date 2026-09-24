@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  collectRecentRecommendationUsage,
   findLatestStylistOutfits,
   loadStylistConversation,
   parseStylistOutfits,
@@ -126,6 +127,22 @@ Outfit 2 — Tan/Blue
     ]
 
     expect(findLatestStylistOutfits(messages, outfitGarments)).toEqual([])
+  })
+
+  it('counts recently recommended garments across prior assistant answers', () => {
+    const messages = [
+      { role: 'assistant', text: 'Outfit 1 — First\n- Reda grey wool hopsack Bedford jacket\n- Light blue houndstooth dress shirt\n- Oat lightweight stretch chino' },
+      { role: 'user', text: 'Give me another option.' },
+      { role: 'assistant', text: 'Outfit 1 — Second\n- Reda grey wool hopsack Bedford jacket\n- Blue/lavender tattersall performance shirt\n- Khaki lightweight chino' },
+    ]
+
+    expect(collectRecentRecommendationUsage(messages, outfitGarments)).toEqual([
+      { id: 'e13f2eec-58b2-4eb3-be07-076d49cc507c', name: 'Reda grey wool hopsack Bedford jacket', count: 2 },
+      { id: 'pants-1', name: 'Tessuti Di Sondrio oat lightweight stretch chino', count: 1 },
+      { id: 'pants-2', name: 'di Sondrio khaki lightweight cotton chino', count: 1 },
+      { id: 'shirt-1', name: 'Light blue Mayfair wrinkle-resistant houndstooth dress shirt', count: 1 },
+      { id: 'shirt-2', name: 'Blue and lavender tattersall performance dress shirt', count: 1 },
+    ])
   })
 })
 

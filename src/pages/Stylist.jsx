@@ -9,6 +9,7 @@ import { fetchForecast } from '../lib/weather'
 import { categoryById } from '../lib/constants'
 import { buildStylistQuestion, STYLIST_STARTERS } from '../lib/stylistRequest'
 import {
+  collectRecentRecommendationUsage,
   findLatestStylistOutfits,
   loadStylistConversation,
   parseStylistResponse,
@@ -112,7 +113,8 @@ export default function Stylist() {
         formality: g.formality, warmth: g.warmth, status: g.status,
         times_worn: g.times_worn, last_worn: g.last_worn, fit_notes: g.fit_notes,
       }))
-      const groundedQuestion = buildStylistQuestion(question, focusedGarment)
+      const recentRecommendations = collectRecentRecommendationUsage(messages, garments || [])
+      const groundedQuestion = buildStylistQuestion(question, focusedGarment, recentRecommendations)
       const requestQuestion = ctx.unavailable.length
         ? `Context unavailable: ${ctx.unavailable.join(', ')}. Do not infer those details.\n${groundedQuestion}`
         : groundedQuestion

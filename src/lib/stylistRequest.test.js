@@ -36,6 +36,27 @@ describe('buildStylistQuestion', () => {
     expect(result).toContain('User question: Make the second one warmer.')
     expect(result).toContain('After a follow-up, return every complete revised outfit')
   })
+
+  it('requires distinct core pieces when multiple outfits are requested', () => {
+    const result = buildStylistQuestion('Give me two business casual outfits.')
+
+    expect(result).toContain('Never return the same complete outfit twice')
+    expect(result).toContain('different jacket or suit, shirt or top, and trousers or bottom')
+    expect(result).toContain('compare the catalog IDs across every outfit')
+  })
+
+  it('tells a fresh request to rotate away from recently recommended garments', () => {
+    const result = buildStylistQuestion('Dinner with friends tomorrow.', null, [
+      { id: 'jacket-1', name: 'Gray jacket', count: 3 },
+      { id: 'shirt-1', name: 'Blue shirt', count: 2 },
+    ])
+
+    expect(result).toContain('Recently recommended garments')
+    expect(result).toContain('Gray jacket')
+    expect(result).toContain('"count":3')
+    expect(result).toContain('For a new request, favor suitable active alternatives')
+    expect(result).toContain('For a follow-up, preserve every piece the user did not ask to change')
+  })
 })
 
 describe('stylistPathForGarment', () => {

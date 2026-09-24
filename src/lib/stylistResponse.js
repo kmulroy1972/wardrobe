@@ -102,6 +102,28 @@ export function findLatestStylistOutfits(messages = [], garments = []) {
   return []
 }
 
+export function collectRecentRecommendationUsage(messages = [], garments = [], answerLimit = 4) {
+  const usage = new Map()
+  let answersRead = 0
+
+  for (let index = messages.length - 1; index >= 0 && answersRead < answerLimit; index -= 1) {
+    if (messages[index]?.role !== 'assistant') continue
+    answersRead += 1
+    for (const outfit of parseStylistOutfits(messages[index].text, garments)) {
+      for (const { g } of outfit.items) {
+        const prior = usage.get(g.id)
+        usage.set(g.id, {
+          id: g.id,
+          name: g.name,
+          count: (prior?.count || 0) + 1,
+        })
+      }
+    }
+  }
+
+  return [...usage.values()].sort((a, b) => b.count - a.count || String(a.id).localeCompare(String(b.id)))
+}
+
 export function loadStylistConversation(storage, userId) {
   if (!storage || !userId) return []
   try {
