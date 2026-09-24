@@ -157,44 +157,4 @@ describe('recommendOutfits', () => {
     ))).toBe(true)
   })
 
-  it('never includes a garment excluded from this recommendation', () => {
-    const result = recommendOutfits({
-      garments: [
-        garment('worn-jacket', 'blazer'),
-        garment('fresh-jacket', 'blazer'),
-        garment('blue-shirt', 'dress_shirt', { color: 'Light blue' }),
-        garment('trousers', 'dress_pants', { color: 'Gray' }),
-      ],
-      occasion: 'business_casual',
-      weather: { hi: 55, precip: 0 },
-      count: 1,
-      constraints: { requiredSlots: ['jacket'], excludedGarmentIds: ['worn-jacket'] },
-    })
-
-    expect(result.outfits).toHaveLength(1)
-    expect(result.outfits[0].items.some(({ g }) => g.id === 'worn-jacket')).toBe(false)
-    expect(result.outfits[0].items.find(({ slot }) => slot === 'jacket').g.id).toBe('fresh-jacket')
-  })
-
-  it('keeps requested shirt choices distinct across multiple outfits', () => {
-    const result = recommendOutfits({
-      garments: [
-        garment('grey-jacket', 'blazer'),
-        garment('navy-jacket', 'blazer'),
-        garment('blue-shirt', 'dress_shirt', { color: 'Light blue' }),
-        garment('white-shirt', 'dress_shirt', { color: 'White' }),
-        garment('trousers', 'dress_pants', { color: 'Gray' }),
-      ],
-      occasion: 'business_casual',
-      weather: { hi: 55, precip: 0 },
-      count: 2,
-      constraints: { requiredSlots: ['jacket'], distinctSlots: ['top'] },
-    })
-
-    expect(result.outfits).toHaveLength(2)
-    expect(new Set(result.outfits.map((outfit) => (
-      outfit.items.find(({ slot }) => slot === 'top').g.id
-    ))).size).toBe(2)
-  })
-
 })

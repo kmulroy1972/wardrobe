@@ -4,63 +4,22 @@ import GarmentThumb from '../components/GarmentThumb'
 import GarmentPreviewDialog from '../components/GarmentPreviewDialog'
 import OutfitSuggestion from '../components/OutfitSuggestion'
 import { useAuth } from '../App'
-import { addWishlistItem, askStylist, getProfile, listGarments, listOutfits, listWishlist } from '../lib/data'
-import { fetchForecast, dayName } from '../lib/weather'
-import { recommendOutfits } from '../lib/outfitEngine'
-import { categoryById, FORMALITY, SLOT_LABELS } from '../lib/constants'
+import { askStylist, getProfile, listGarments, listOutfits, listWishlist } from '../lib/data'
+import { fetchForecast } from '../lib/weather'
+import { categoryById } from '../lib/constants'
 import { buildStylistQuestion, STYLIST_STARTERS } from '../lib/stylistRequest'
-import { loadStylistConversation, parseStylistResponse, saveStylistConversation } from '../lib/stylistResponse'
-import { buildLocalRevisionTurn, buildStylistConversationRecommendations } from '../lib/stylistRecommendations'
-import { parseOutfitRequest } from '../lib/outfitRequest'
-
-// A sensible category to shop for when an outfit slot has nothing in it
-const GAP_CATEGORY = {
-  formal: { suit: 'suit', jacket: 'blazer', top: 'dress_shirt', bottom: 'dress_pants', shoes: 'dress_shoes' },
-  business_casual: { top: 'dress_shirt', bottom: 'chinos', shoes: 'dress_shoes' },
-  casual: { top: 'casual_shirt', bottom: 'jeans', shoes: 'casual_shoes' },
-}
-
-function GapList({ missing, occasion, city }) {
-  const [added, setAdded] = useState({})
-  async function add(slot) {
-    const category = GAP_CATEGORY[occasion]?.[slot] || 'accessory'
-    try {
-      await addWishlistItem({
-        name: `${SLOT_LABELS[slot] || slot} (${occasion.replace('_', ' ')})`,
-        category,
-        priority: 'soon',
-        location: city,
-        notes: 'Added from a stylist gap',
-      })
-      setAdded((a) => ({ ...a, [slot]: true }))
-    } catch {
-      // leave the button active so it can be retried
-    }
-  }
-  return (
-    <div className="row" style={{ gap: 6 }}>
-      <span className="muted">Missing for {occasion.replace('_', ' ')}:</span>
-      {missing.map((slot) => (
-        <button key={slot} className="chip brass" style={{ cursor: 'pointer' }}
-          onClick={() => add(slot)} disabled={added[slot]}>
-          {added[slot] ? `${SLOT_LABELS[slot]} ✓ on the list` : `+ To Buy: ${SLOT_LABELS[slot] || slot}`}
-        </button>
-      ))}
-    </div>
-  )
-}
+import {
+  findLatestStylistOutfits,
+  loadStylistConversation,
+  parseStylistResponse,
+  saveStylistConversation,
+} from '../lib/stylistResponse'
 
 export default function Stylist() {
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [garments, setGarments] = useState(null)
   const [garmentLoadError, setGarmentLoadError] = useState(false)
-  const [wx, setWx] = useState(null)
-  const [occasion, setOccasion] = useState('business_casual')
-  const [city, setCity] = useState('dc')
-  const [dayIdx, setDayIdx] = useState(0)
-  const [rec, setRec] = useState(null)
-  const [shuffle, setShuffle] = useState(0)
 
   // AI chat state
   const [messages, setMessages] = useState(() => loadStylistConversation(
@@ -125,17 +84,6 @@ export default function Stylist() {
   }, [loadGarments])
 
   useEffect(() => {
-    setWx(null)
-    fetchForecast(city).then(setWx).catch(() => setWx(undefined))
-  }, [city])
-
-  useEffect(() => {
-    if (!garments || !wx) return
-    const pool = garments.filter((g) => g.location === city)
-    setRec(recommendOutfits({ garments: pool, occasion, weather: wx.daily[dayIdx], count: 3 }))
-  }, [garments, wx, occasion, city, dayIdx, shuffle])
-
-  useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, thinking])
 
@@ -153,22 +101,6 @@ export default function Stylist() {
     setDraft('')
     const history = messages.map((m) => ({ role: m.role, content: m.text }))
     const nextMessages = [...messages, { role: 'user', text: question }]
-    const isLocalRevision = Boolean(visualRecommendations) && (
-      parseOutfitRequest(question).isRevision || visualRecommendations.needsClarification
-    )
-    if (isLocalRevision) {
-      const localTurn = buildLocalRevisionTurn({
-        question,
-        messages,
-        garments: garments || [],
-        occasion,
-        location: city,
-        weather: wx?.daily?.[dayIdx],
-        selectedGarment: focusedGarment,
-      })
-      setMessages(localTurn.messages)
-      return
-    }
     setMessages(nextMessages)
     setThinking(true)
     setAiStatus('idle')
@@ -192,7 +124,7 @@ export default function Stylist() {
       })
       if (res?.error === 'no_key') {
         setAiStatus('no_key')
-        setMessages((ms) => [...ms, { role: 'assistant', text: 'The AI stylist isn’t connected yet — an Anthropic API key needs to be added (see Profile page for the one-time setup). The outfit suggestions above work without it.' }])
+        setMessages((ms) => [...ms, { role: 'assistant', text: 'The AI stylist isn’t connected yet — an Anthropic API key needs to be added on the Profile page.' }])
       } else {
         setAiStatus('ready')
         setMessages((ms) => [...ms, { role: 'assistant', text: res?.text || 'No answer came back — try again.' }])
@@ -229,16 +161,9 @@ export default function Stylist() {
       .sort((a, b) => categoryById(a.category).label.localeCompare(categoryById(b.category).label) || a.name.localeCompare(b.name))
   ), [garments])
   const visualRecommendations = useMemo(() => {
-    if (!garments) return null
-    return buildStylistConversationRecommendations({
-      messages,
-      garments,
-      occasion,
-      location: city,
-      weather: wx?.daily?.[dayIdx],
-      selectedGarment: focusedGarment,
-    })
-  }, [messages, garments, occasion, city, wx, dayIdx, focusedGarment])
+    if (!garments) return []
+    return findLatestStylistOutfits(messages, garments)
+  }, [messages, garments])
 
   function selectGarment(id) {
     setSearchParams(id ? { garment: id } : {}, { replace: true })
@@ -254,23 +179,10 @@ export default function Stylist() {
   }
 
   function renderAiText(text) {
-    const parsed = parseStylistResponse(text, garments || [])
+    const parsed = parseStylistResponse(text)
     return (
       <>
-        {parsed.segments.map((segment, index) => (
-          segment.type === 'garment' ? (
-            <button
-              key={`${segment.garment.id}-${index}`}
-              type="button"
-              className="garment-chip"
-              onClick={() => setPreviewGarment(segment.garment)}
-              aria-label={`Preview ${segment.garment.name}`}
-            >
-              {segment.garment.photo_url && <img src={segment.garment.photo_url} alt="" />}
-              {segment.garment.name}
-            </button>
-          ) : <span key={index}>{segment.text}</span>
-        ))}
+        <span>{parsed.text}</span>
         {parsed.truncated && (
           <span className="stylist-truncated">
             This answer stopped early.
@@ -298,7 +210,7 @@ export default function Stylist() {
           </p>
         </div>
         {messages.length > 0 && (
-          <button type="button" className="btn small ghost" onClick={startOver}>Start over</button>
+          <button type="button" className="btn small ghost" onClick={startOver} disabled={thinking}>Start over</button>
         )}
       </div>
 
@@ -374,49 +286,27 @@ export default function Stylist() {
           {thinking && <div className="bubble ai">Consulting the closet…</div>}
           <div ref={chatEnd} />
         </div>
-        {visualRecommendations?.outfits.length > 0 && (
+        {visualRecommendations.length > 0 && (
           <section className="stack stylist-visual-outfits" aria-label="Visual outfit recommendations">
             <div className="recommendation-head">
-              <div className="eyebrow">Complete visual answer</div>
+              <div className="eyebrow">Your outfits</div>
               <h2>
-                {visualRecommendations.outfits.length}{' '}
-                {visualRecommendations.outfits.length === 1 ? 'outfit' : 'outfits'} from your closet
+                {visualRecommendations.length}{' '}
+                {visualRecommendations.length === 1 ? 'outfit' : 'outfits'} from your closet
               </h2>
-              <p className="muted">Click any garment image to enlarge it. Use “Back to outfit” to return here without losing anything.</p>
+              <p className="muted">These are the exact pieces named above. Click a photo to enlarge it, then choose “Back to outfit.”</p>
             </div>
-            {(visualRecommendations.revisionSummary || visualRecommendations.needsClarification) && (
-              <div className={`stylist-revision-status ${visualRecommendations.needsClarification ? 'needs-input' : ''}`} role="status">
-                {visualRecommendations.needsClarification || visualRecommendations.revisionSummary}
-              </div>
-            )}
-            {visualRecommendations.outfits.map((outfit, index) => (
+            {visualRecommendations.map((outfit, index) => (
               <OutfitSuggestion
                 key={`${outfit.name}-${index}`}
                 outfit={outfit}
-                occasion={occasion}
-                location={focusedGarment?.location || city}
                 onGarmentClick={setPreviewGarment}
+                canSave={false}
               />
             ))}
-            {visualRecommendations.missing.length > 0 && (
-              <div className="stylist-visual-gap">
-                <strong>Still needed to finish the look:</strong>{' '}
-                {visualRecommendations.missing.map((slot) => SLOT_LABELS[slot] || slot).join(', ')}.
-                The pictured pieces above are still usable now.
-              </div>
-            )}
             <div className="stylist-revise-help">
-              <strong>Want to change one piece?</strong>
-              <span>Ask below. Your other pieces will stay in place.</span>
-              <div className="prompt-starters" aria-label="Example outfit changes">
-                <button type="button" className="prompt-chip" onClick={() => setDraft('Use a different shirt for the second night. Keep everything else the same.')}>
-                  Different shirt in outfit 2
-                </button>
-                <button type="button" className="prompt-chip" onClick={() => setDraft('Change the jacket in outfit 1. Keep everything else the same.')}>
-                  Change jacket in outfit 1
-                </button>
-              </div>
-              <small>Name a piece you wore, too—for example, “Replace the Reda jacket; I wore it today.”</small>
+              <strong>Want a change?</strong>
+              <span>Ask below—for example, “Use a different shirt in outfit 2” or “I wore that jacket today.”</span>
             </div>
           </section>
         )}
@@ -429,9 +319,6 @@ export default function Stylist() {
           />
           <button className="btn" disabled={thinking || !draft.trim() || garments === null || garmentLoadError}>Ask the stylist</button>
         </form>
-        <p className="muted stylist-revision-hint">
-          Already have outfits? Ask for a change in ordinary language, such as “Different shirt in outfit 2.”
-        </p>
         {garmentLoadError && (
           <p className="form-msg" role="alert">
             I couldn’t open your wardrobe, so I won’t guess. <button type="button" className="btn small ghost" onClick={loadGarments}>Try again</button>
@@ -440,7 +327,6 @@ export default function Stylist() {
         {aiStatus === 'no_key' && (
           <p className="muted" style={{ marginTop: 8 }}>
             AI advice needs one-time setup on the <Link to="/profile">Profile page</Link>.
-            The outfit suggestions below still work without it.
           </p>
         )}
         {contextWarning.length > 0 && (
@@ -448,77 +334,7 @@ export default function Stylist() {
             I answered without {contextWarning.join(', ')} because that information could not be loaded. I did not guess it.
           </p>
         )}
-        <p className="muted stylist-builder-link">
-          Ready to choose pieces or save a look? <Link to="/outfits/new">Open Build an outfit</Link>.
-        </p>
       </div>
-
-      <div className="card">
-        <div className="stack" style={{ gap: 10 }}>
-          <div className="seg" role="group" aria-label="Occasion">
-            {FORMALITY.map((f) => (
-              <button key={f.id} className={occasion === f.id ? 'active' : ''} onClick={() => setOccasion(f.id)}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="row">
-            <div className="seg" role="group" aria-label="City">
-              <button className={city === 'dc' ? 'active' : ''} onClick={() => setCity('dc')}>D.C.</button>
-              <button className={city === 'howell' ? 'active' : ''} onClick={() => setCity('howell')}>Howell</button>
-            </div>
-            {wx && (
-              <div className="seg" role="group" aria-label="Day">
-                {wx.daily.slice(0, 5).map((d, i) => (
-                  <button key={d.date} className={dayIdx === i ? 'active' : ''} onClick={() => setDayIdx(i)}>
-                    {dayName(d.date, i)} {d.hi}°
-                  </button>
-                ))}
-              </div>
-            )}
-            <button className="btn small ghost" onClick={() => setShuffle((s) => s + 1)}>Shuffle ↻</button>
-          </div>
-          {wx && (
-            <p className="muted" style={{ margin: 0 }}>
-              {wx.daily[dayIdx].icon} {wx.daily[dayIdx].label}, high {wx.daily[dayIdx].hi}° / low {wx.daily[dayIdx].lo}°
-              {wx.daily[dayIdx].precip >= 40 ? ` — ${wx.daily[dayIdx].precip}% chance of rain` : ''}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {visualRecommendations?.outfits.length > 0 ? null : garmentLoadError ? null : garments === null ? (
-        <p className="muted">Opening the closet…</p>
-      ) : rec === null ? (
-        <p className="muted">Waiting on the forecast…</p>
-      ) : rec.outfits.length === 0 ? (
-        <div className="empty">
-          <h3>Not enough pieces in this closet</h3>
-          <p>
-            For a {occasion.replace('_', ' ')} outfit in {city === 'dc' ? 'D.C.' : 'Howell'} I still need:{' '}
-            {rec.missing.map((m) => m.replace('_', ' ')).join(', ')}.
-          </p>
-          <div className="row" style={{ justifyContent: 'center', marginBottom: 10 }}>
-            <GapList missing={rec.missing} occasion={occasion} city={city} />
-          </div>
-          <Link className="btn" to="/closet/new">Add garments</Link>
-        </div>
-      ) : (
-        <div className="stack">
-          {rec.outfits.map((o, i) => (
-            <OutfitSuggestion
-              key={o.name + i + shuffle}
-              outfit={o}
-              occasion={occasion}
-              location={city}
-              onGarmentClick={setPreviewGarment}
-            />
-          ))}
-          {rec.missing.length > 0 && (
-            <GapList missing={rec.missing} occasion={occasion} city={city} />
-          )}
-        </div>
-      )}
 
       <GarmentPreviewDialog garment={previewGarment} onClose={closeGarmentPreview} />
     </div>

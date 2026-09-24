@@ -139,7 +139,7 @@ function buildTips({ outfit, occasion, wBand, rain }) {
   return tips.slice(0, 3)
 }
 
-export function nameOutfit(outfit) {
+function nameOutfit(outfit) {
   const bySlot = {}
   for (const { slot, g } of outfit) bySlot[slot] = g
   const anchor = bySlot.suit || bySlot.jacket || bySlot.top
@@ -167,11 +167,9 @@ function diversityKey(outfit) {
 export function recommendOutfits({ garments, occasion, weather, count = 3, constraints = {} }) {
   const wBand = band(weather?.hi ?? 68)
   const rain = (weather?.precip ?? 0) >= 50
-  const excludedGarmentIds = new Set(constraints.excludedGarmentIds || [])
-  const pool = garments.filter((g) => g.status === 'active' && !excludedGarmentIds.has(g.id))
+  const pool = garments.filter((g) => g.status === 'active')
   const requiredSlots = new Set(constraints.requiredSlots || [])
   const excludedSlots = new Set(constraints.excludedSlots || [])
-  const distinctSlots = new Set(constraints.distinctSlots || [])
   const anchor = pool.find((garment) => garment.id === constraints.anchorGarmentId)
   const anchorSlot = anchor ? categoryById(anchor.category).slot : null
   if (anchorSlot) requiredSlots.add(anchorSlot)
@@ -272,17 +270,10 @@ export function recommendOutfits({ garments, occasion, weather, count = 3, const
   // Pick top outfits that differ meaningfully (distinct anchor pieces)
   const picked = []
   const usedAnchors = new Set()
-  const repeatsDistinctSlot = (candidate) => [...distinctSlots].some((slot) => {
-    const garmentId = candidate.outfit.find((item) => item.slot === slot)?.g.id
-    return garmentId && picked.some((selection) => (
-      selection.outfit.find((item) => item.slot === slot)?.g.id === garmentId
-    ))
-  })
   for (const c of combos) {
     const anchor = c.outfit.find((o) => ['suit', 'jacket', 'top'].includes(o.slot))
     const key = diversityKey(c.outfit)
     if (picked.some((p) => p.key === key)) continue
-    if (repeatsDistinctSlot(c)) continue
     const anchorId = anchor?.g.id
     if (usedAnchors.has(anchorId) && picked.length < combos.length - 1) continue
     usedAnchors.add(anchorId)
@@ -293,7 +284,7 @@ export function recommendOutfits({ garments, occasion, weather, count = 3, const
   for (const c of combos) {
     if (picked.length >= count) break
     const key = diversityKey(c.outfit)
-    if (!picked.some((p) => p.key === key) && !repeatsDistinctSlot(c)) picked.push({ key, ...c })
+    if (!picked.some((p) => p.key === key)) picked.push({ key, ...c })
   }
 
   return {

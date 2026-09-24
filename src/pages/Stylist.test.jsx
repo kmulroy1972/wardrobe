@@ -7,17 +7,14 @@ vi.mock('../App', () => ({
 }))
 
 vi.mock('../lib/data', () => ({
-  addWishlistItem: vi.fn(),
   askStylist: vi.fn(),
   getProfile: vi.fn(),
   listGarments: vi.fn(),
   listOutfits: vi.fn(),
   listWishlist: vi.fn(),
-  saveOutfit: vi.fn(),
 }))
 
 vi.mock('../lib/weather', () => ({
-  dayName: vi.fn(),
   fetchForecast: vi.fn(),
 }))
 
@@ -37,8 +34,8 @@ describe('Stylist', () => {
     expect(html).toContain('Dinner with friends tomorrow')
     expect(html).toContain('Give me two different looks without a tie')
     expect(html).toContain('Nothing is saved or changed')
-    expect(html).toContain('Open Build an outfit')
     expect(html).toContain('Your answer will name the exact pieces')
-    expect(html).toContain('Already have outfits? Ask for a change in ordinary language')
+    expect(html).not.toContain('Shuffle')
+    expect(html).not.toContain('Open Build an outfit')
   })
 })

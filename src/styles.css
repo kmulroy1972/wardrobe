@@ -268,19 +268,10 @@ h3 { font-size: 1.05rem; }
   min-width: 0; padding: 12px 14px; border-radius: 999px; border: 1px solid var(--hairline);
   background: var(--paper); font: 0.92rem var(--body);
 }
-.stylist-builder-link { margin: 12px 0 0; font-size: 0.82rem; }
-.stylist-builder-link a { font-weight: 600; }
 .chat { display: flex; flex-direction: column; gap: 10px; }
 .bubble { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 0.92rem; white-space: pre-wrap; }
 .bubble.me { align-self: flex-end; background: var(--bottle); color: #f4f2ea; border-bottom-right-radius: 4px; }
 .bubble.ai { align-self: flex-start; background: var(--paper); border: 1px solid var(--hairline); border-bottom-left-radius: 4px; }
-.bubble .garment-chip {
-  display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;
-  background: var(--cloth); border: 1px solid var(--hairline); border-radius: 999px;
-  padding: 2px 8px 2px 2px; font-size: 0.78rem; font-weight: 600; color: var(--ink);
-  text-decoration: none; margin: 1px 2px; font-family: var(--body); cursor: pointer;
-}
-.bubble .garment-chip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
 .stylist-truncated {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--hairline);
@@ -295,26 +286,11 @@ h3 { font-size: 1.05rem; }
 .stylist-visual-outfits .recommendation-head h2 { margin: 4px 0; }
 .stylist-visual-outfits .recommendation-head p { margin: 0; }
 .stylist-visual-outfits > .card { background: var(--cloth); }
-.stylist-visual-gap {
-  padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 10px;
-  background: var(--paper); color: var(--ink-soft); font-size: 0.82rem;
-}
-.stylist-revision-status {
-  padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--bottle) 30%, var(--hairline));
-  border-radius: 10px; background: color-mix(in srgb, var(--bottle) 8%, var(--paper));
-  color: var(--bottle); font-size: 0.84rem; font-weight: 600;
-}
-.stylist-revision-status.needs-input {
-  border-color: color-mix(in srgb, var(--brass) 55%, var(--hairline));
-  background: color-mix(in srgb, var(--brass) 10%, var(--paper)); color: var(--ink);
-}
 .stylist-revise-help {
   display: grid; gap: 6px; padding: 14px; border: 1px solid var(--hairline);
   border-radius: 12px; background: var(--paper);
 }
-.stylist-revise-help .prompt-starters { margin: 4px 0 0; }
 .stylist-revise-help small, .stylist-revise-help span { color: var(--ink-soft); }
-.stylist-revision-hint { margin: 7px 2px 0; font-size: 0.76rem; }
 
 .garment-preview-backdrop {
   position: fixed; inset: 0; z-index: 100;

@@ -3,7 +3,11 @@ import { buildStylistQuestion, stylistPathForGarment } from './stylistRequest'
 
 describe('buildStylistQuestion', () => {
   it('passes through an ordinary question when no garment is selected', () => {
-    expect(buildStylistQuestion('  Dinner with friends tomorrow  ')).toBe('Dinner with friends tomorrow')
+    const result = buildStylistQuestion('  Dinner with friends tomorrow  ')
+
+    expect(result).toContain('User question: Dinner with friends tomorrow')
+    expect(result).toContain('return every complete revised outfit')
+    expect(result).toContain('[[catalog id]]')
   })
 
   it('identifies the exact selected garment for ordinary references such as “this”', () => {
@@ -23,7 +27,14 @@ describe('buildStylistQuestion', () => {
   })
 
   it('does not claim exact garment context when identity is incomplete', () => {
-    expect(buildStylistQuestion('What goes with this?', { id: 'jacket-123' })).toBe('What goes with this?')
+    expect(buildStylistQuestion('What goes with this?', { id: 'jacket-123' })).not.toContain('Selected catalog garment')
+  })
+
+  it('requires a complete visual response after a follow-up', () => {
+    const result = buildStylistQuestion('Make the second one warmer.')
+
+    expect(result).toContain('User question: Make the second one warmer.')
+    expect(result).toContain('After a follow-up, return every complete revised outfit')
   })
 })
 

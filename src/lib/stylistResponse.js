@@ -1,8 +1,8 @@
+import { categoryById } from './constants'
+
 const STORAGE_PREFIX = 'wardrobe-stylist-conversation:'
 
-const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-export function parseStylistResponse(text, garments = []) {
+export function parseStylistResponse(text) {
   const source = String(text || '')
   const lastMarkerStart = source.lastIndexOf('[[')
   const lastMarkerEnd = source.lastIndexOf(']]')
@@ -12,22 +12,94 @@ export function parseStylistResponse(text, garments = []) {
   if (truncated) cleanText = cleanText.slice(0, cleanText.lastIndexOf('[['))
   cleanText = cleanText.replace(/\*\*/g, '').trimEnd()
 
-  const namedGarments = garments
-    .filter((garment) => garment?.id && garment?.name)
-    .sort((a, b) => b.name.length - a.name.length)
-  if (namedGarments.length === 0) {
-    return { segments: cleanText ? [{ type: 'text', text: cleanText }] : [], truncated }
+  return { text: cleanText, truncated }
+}
+
+const OUTFIT_HEADING = /^(?:#{1,6}\s*)?(?:outfit|look)\s*(\d+)\s*(?:[—–:-]\s*(.*?))?\s*:?$/i
+const BULLET_LINE = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/
+const NON_DISTINCTIVE_WORDS = new Set([
+  'a', 'an', 'and', 'by', 'for', 'from', 'in', 'of', 'or', 'the', 'to', 'with',
+])
+
+function normalizedWords(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/grey/g, 'gray')
+    .match(/[a-z0-9]+/g)
+    ?.filter((word) => word.length > 1 && !NON_DISTINCTIVE_WORDS.has(word)) || []
+}
+
+function garmentForBullet(text, garmentsById, garments) {
+  const markerIds = [...text.matchAll(/\[\[([^\]]+)\]\]/g)].map((match) => match[1].trim())
+  for (const id of markerIds) {
+    if (garmentsById.has(id)) return garmentsById.get(id)
   }
 
-  const garmentByName = new Map(namedGarments.map((garment) => [garment.name.toLowerCase(), garment]))
-  const namePattern = namedGarments.map((garment) => escapeRegExp(garment.name)).join('|')
-  const parts = cleanText.split(new RegExp(`(${namePattern})`, 'gi')).filter(Boolean)
-  const segments = parts.map((part) => {
-    const garment = garmentByName.get(part.toLowerCase())
-    return garment ? { type: 'garment', garment } : { type: 'text', text: part }
-  })
+  const clean = text.replace(/\[\[[^\]]+\]\]/g, '').replace(/\*\*/g, '').trim()
+  const lower = clean.toLowerCase()
+  const exactMatches = garments.filter((garment) => lower.includes(garment.name.toLowerCase()))
+  if (exactMatches.length === 1) return exactMatches[0]
 
-  return { segments, truncated }
+  const queryWords = new Set(normalizedWords(clean))
+  const scored = garments.map((garment) => {
+    const nameWords = new Set(normalizedWords(garment.name))
+    const overlap = [...queryWords].filter((word) => nameWords.has(word)).length
+    return { garment, overlap, coverage: overlap / Math.max(queryWords.size, 1) }
+  }).filter(({ overlap, coverage }) => overlap >= 2 && coverage >= 0.5)
+    .sort((a, b) => b.overlap - a.overlap || b.coverage - a.coverage)
+
+  if (scored.length === 0) return null
+  if (scored[1] && scored[0].overlap === scored[1].overlap && scored[0].coverage === scored[1].coverage) return null
+  return scored[0].garment
+}
+
+function completeVisualOutfit(section) {
+  const slotCount = new Set(section.items.map(({ slot }) => slot)).size
+  return !section.hasUnavailableGarment && section.items.length >= 2 && slotCount >= 2
+}
+
+export function parseStylistOutfits(text, garments = []) {
+  const catalogGarments = garments.filter((garment) => garment?.id && garment?.name)
+  if (catalogGarments.length === 0) return []
+
+  const garmentsById = new Map(catalogGarments.map((garment) => [String(garment.id), garment]))
+  const sections = []
+  let current = null
+
+  for (const rawLine of String(text || '').split(/\r?\n/)) {
+    const line = rawLine.replace(/\*\*/g, '').trim()
+    const heading = line.match(OUTFIT_HEADING)
+    if (heading) {
+      current = { name: heading[2]?.trim() || `Outfit ${heading[1]}`, items: [], tips: [], hasUnavailableGarment: false }
+      sections.push(current)
+      continue
+    }
+
+    const bullet = rawLine.match(BULLET_LINE)
+    if (!bullet) continue
+    const garment = garmentForBullet(bullet[1], garmentsById, catalogGarments)
+    if (!garment) continue
+    if (!current) {
+      current = { name: 'Suggested outfit', items: [], tips: [], hasUnavailableGarment: false }
+      sections.push(current)
+    }
+    if (garment.status !== 'active') {
+      current.hasUnavailableGarment = true
+      continue
+    }
+    if (current.items.some(({ g }) => g.id === garment.id)) continue
+    current.items.push({ slot: categoryById(garment.category).slot, g: garment })
+  }
+
+  return sections.filter(completeVisualOutfit).map(({ hasUnavailableGarment, ...outfit }) => outfit)
+}
+
+export function findLatestStylistOutfits(messages = [], garments = []) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role !== 'assistant') continue
+    return parseStylistOutfits(messages[index].text, garments)
+  }
+  return []
 }
 
 export function loadStylistConversation(storage, userId) {

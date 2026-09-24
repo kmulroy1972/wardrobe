@@ -3,7 +3,7 @@ import FlatLay from './FlatLay'
 import { categoryById, SLOT_LABELS } from '../lib/constants'
 import { saveOutfit } from '../lib/data'
 
-export default function OutfitSuggestion({ outfit, occasion, location, onGarmentClick }) {
+export default function OutfitSuggestion({ outfit, occasion, location, onGarmentClick, canSave = true }) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState(null)
@@ -31,9 +31,11 @@ export default function OutfitSuggestion({ outfit, occasion, location, onGarment
     <div className="card fade-in">
       <div className="spread">
         <h3>{outfit.name}</h3>
-        <button type="button" className="btn small ghost" onClick={save} disabled={saving || saved}>
-          {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save outfit'}
-        </button>
+        {canSave && (
+          <button type="button" className="btn small ghost" onClick={save} disabled={saving || saved}>
+            {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save outfit'}
+          </button>
+        )}
       </div>
       <div style={{ margin: '10px 0' }}>
         <FlatLay items={outfit.items} onGarmentClick={onGarmentClick} />
@@ -47,7 +49,7 @@ export default function OutfitSuggestion({ outfit, occasion, location, onGarment
         ))}
       </ul>
       <div className="stack" style={{ gap: 6 }}>
-        {outfit.tips.map((t, i) => (
+        {(outfit.tips || []).map((t, i) => (
           <div className="tip" key={i}>{t}</div>
         ))}
       </div>
