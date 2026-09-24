@@ -9,6 +9,7 @@ import { fetchForecast, dayName } from '../lib/weather'
 import { recommendOutfits } from '../lib/outfitEngine'
 import { categoryById, FORMALITY, SLOT_LABELS } from '../lib/constants'
 import { buildStylistQuestion, STYLIST_STARTERS } from '../lib/stylistRequest'
+import { loadStylistConversation, parseStylistResponse, saveStylistConversation } from '../lib/stylistResponse'
 
 // A sensible category to shop for when an outfit slot has nothing in it
 const GAP_CATEGORY = {
@@ -60,7 +61,10 @@ export default function Stylist() {
   const [shuffle, setShuffle] = useState(0)
 
   // AI chat state
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState(() => loadStylistConversation(
+    typeof window === 'undefined' ? null : window.sessionStorage,
+    user.id,
+  ))
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
   const [aiStatus, setAiStatus] = useState('idle') // idle | ready | no_key
@@ -133,9 +137,16 @@ export default function Stylist() {
     chatEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, thinking])
 
-  async function send(e) {
-    e.preventDefault()
-    const question = draft.trim()
+  useEffect(() => {
+    saveStylistConversation(
+      typeof window === 'undefined' ? null : window.sessionStorage,
+      user.id,
+      messages,
+    )
+  }, [messages, user.id])
+
+  async function ask(questionText) {
+    const question = questionText.trim()
     if (!question || thinking) return
     setDraft('')
     const history = messages.map((m) => ({ role: m.role, content: m.text }))
@@ -186,7 +197,11 @@ export default function Stylist() {
     }
   }
 
-  const garmentById = (id) => garments?.find((g) => g.id === id)
+  function send(e) {
+    e.preventDefault()
+    ask(draft)
+  }
+
   const requestedGarmentId = searchParams.get('garment')
   const focusedGarment = garments?.find((g) => g.id === requestedGarmentId && g.status === 'active')
   const selectableGarments = useMemo(() => (
@@ -201,27 +216,45 @@ export default function Stylist() {
 
   const closeGarmentPreview = useCallback(() => setPreviewGarment(null), [])
 
+  function startOver() {
+    setMessages([])
+    setDraft('')
+    setPreviewGarment(null)
+    setAiStatus('idle')
+  }
+
   function renderAiText(text) {
-    // Turn [[garment-id]] references into linked chips with the photo
-    const parts = text.split(/(\[\[[0-9a-f-]{36}\]\])/g)
-    return parts.map((p, i) => {
-      const m = p.match(/^\[\[([0-9a-f-]{36})\]\]$/)
-      if (!m) return <span key={i}>{p}</span>
-      const g = garmentById(m[1])
-      if (!g) return null
-      return (
-        <button
-          key={i}
-          type="button"
-          className="garment-chip"
-          onClick={() => setPreviewGarment(g)}
-          aria-label={`Preview ${g.name}`}
-        >
-          {g.photo_url && <img src={g.photo_url} alt="" />}
-          {g.name}
-        </button>
-      )
-    })
+    const parsed = parseStylistResponse(text, garments || [])
+    return (
+      <>
+        {parsed.segments.map((segment, index) => (
+          segment.type === 'garment' ? (
+            <button
+              key={`${segment.garment.id}-${index}`}
+              type="button"
+              className="garment-chip"
+              onClick={() => setPreviewGarment(segment.garment)}
+              aria-label={`Preview ${segment.garment.name}`}
+            >
+              {segment.garment.photo_url && <img src={segment.garment.photo_url} alt="" />}
+              {segment.garment.name}
+            </button>
+          ) : <span key={index}>{segment.text}</span>
+        ))}
+        {parsed.truncated && (
+          <span className="stylist-truncated">
+            This answer stopped early.
+            <button
+              type="button"
+              disabled={thinking}
+              onClick={() => ask('Please continue the outfit recommendations from where you stopped.')}
+            >
+              Continue the answer
+            </button>
+          </span>
+        )}
+      </>
+    )
   }
 
   return (
@@ -234,6 +267,9 @@ export default function Stylist() {
             Ask naturally. I’ll use your actual wardrobe, fit notes, wear history, and the weather.
           </p>
         </div>
+        {messages.length > 0 && (
+          <button type="button" className="btn small ghost" onClick={startOver}>Start over</button>
+        )}
       </div>
 
       <div className="card stylist-ask-card">
@@ -308,6 +344,7 @@ export default function Stylist() {
           {thinking && <div className="bubble ai">Consulting the closet…</div>}
           <div ref={chatEnd} />
         </div>
+        {messages.length > 0 && <p className="muted stylist-saved-note">This conversation stays in this browser tab if you leave and come back.</p>}
         <form onSubmit={send} className="stylist-question-row">
           <input
             value={draft} onChange={(e) => setDraft(e.target.value)}

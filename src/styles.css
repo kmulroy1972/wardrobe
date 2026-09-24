@@ -279,6 +279,16 @@ h3 { font-size: 1.05rem; }
   text-decoration: none; margin: 1px 2px; font-family: var(--body); cursor: pointer;
 }
 .bubble .garment-chip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.stylist-truncated {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--hairline);
+  color: var(--claret); font-size: 0.78rem; font-weight: 600;
+}
+.stylist-truncated button {
+  border: 1px solid var(--claret); border-radius: 999px; background: transparent;
+  color: var(--claret); padding: 5px 9px; font: 600 0.72rem var(--body); cursor: pointer;
+}
+.stylist-saved-note { margin: 8px 0 0; font-size: 0.76rem; }
 
 .garment-preview-backdrop {
   position: fixed; inset: 0; z-index: 100;
