@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import GarmentThumb from '../components/GarmentThumb'
 import { deleteGarment, getGarment, markWorn } from '../lib/data'
 import { categoryById, FORMALITY, LOCATIONS, STATUSES, WARMTH } from '../lib/constants'
+import { stylistPathForGarment } from '../lib/stylistRequest'
 import useRefetchOnFocus from '../lib/useRefetchOnFocus'
 
 const label = (list, id) => list.find((x) => x.id === id)?.label || id
@@ -106,7 +107,8 @@ export default function GarmentDetail() {
       </div>
 
       <div className="row">
-        <button className="btn" onClick={wearToday}>Wore this today</button>
+        {g.status === 'active' && <Link className="btn" to={stylistPathForGarment(g.id)}>Ask the stylist about this</Link>}
+        <button className="btn ghost" onClick={wearToday}>Wore this today</button>
         <a className="btn ghost" target="_blank" rel="noreferrer"
           href={`https://www.google.com/search?tbm=shop&q=${shopQuery}`}>
           Find online ↗

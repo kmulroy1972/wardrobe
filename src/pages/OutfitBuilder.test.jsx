@@ -4,15 +4,17 @@ import { describe, expect, it } from 'vitest'
 import OutfitBuilder from './OutfitBuilder'
 
 describe('OutfitBuilder', () => {
-  it('renders the recommendation request and action before the closet contents', () => {
+  it('routes recommendations to Stylist before the manual closet controls', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <OutfitBuilder />
       </MemoryRouter>,
     )
 
-    expect(html).toContain('Ask for recommendations')
-    expect(html).toContain('Recommend outfits')
-    expect(html.indexOf('Recommend outfits')).toBeLessThan(html.indexOf('Opening the closet'))
+    expect(html).toContain('Ask the stylist in ordinary language')
+    expect(html).toContain('href="/stylist"')
+    expect(html).toContain('Build manually')
+    expect(html).not.toContain('Recommend outfits')
+    expect(html.indexOf('Ask the stylist')).toBeLessThan(html.indexOf('Opening the closet'))
   })
 })

@@ -149,10 +149,13 @@ export async function deleteOutfit(id) {
   if (error) throw error
 }
 
-export async function getProfile(userId) {
+export async function getProfile(userId, { createIfMissing = true } = {}) {
   const { data, error } = await supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle()
   if (error) throw error
   if (data) return data
+  if (!createIfMissing) {
+    return { user_id: userId, fit_notes: DEFAULT_FIT_NOTES, sizes: {} }
+  }
   // No profile visible — confirm the session is still valid server-side
   // before writing anything; a dead token gets cleared instead.
   const { error: userErr } = await supabase.auth.getUser()

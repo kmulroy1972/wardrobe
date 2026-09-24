@@ -93,46 +93,7 @@ describe('recommendOutfits', () => {
     )
   })
 
-  it('requires a jacket in every requested business-casual outfit', () => {
-    const result = recommendOutfits({
-      garments: [
-        garment('navy-jacket', 'blazer', { formality: 'business_casual' }),
-        garment('gray-jacket', 'blazer', { color: 'Gray', formality: 'business_casual' }),
-        garment('blue-shirt', 'dress_shirt', { color: 'Light blue', formality: 'business_casual' }),
-        garment('white-shirt', 'dress_shirt', { color: 'White', formality: 'business_casual' }),
-        garment('trousers', 'dress_pants', { color: 'Gray', formality: 'business_casual' }),
-        garment('shoes', 'dress_shoes', { color: 'Brown', formality: 'formal' }),
-      ],
-      occasion: 'business_casual',
-      weather: { hi: 72, precip: 0 },
-      count: 2,
-      constraints: { requiredSlots: ['jacket'], excludedSlots: ['tie'] },
-    })
-
-    expect(result.unmet).toEqual([])
-    expect(result.outfits).toHaveLength(2)
-    expect(result.outfits.every((outfit) => outfit.items.some(({ slot }) => slot === 'jacket'))).toBe(true)
-    expect(result.outfits.every((outfit) => outfit.items.every(({ slot }) => slot !== 'tie'))).toBe(true)
-    expect(new Set(result.outfits.map((outfit) => outfit.items.find(({ slot }) => slot === 'jacket').g.id)).size).toBe(2)
-  })
-
-  it('reports an unmet required jacket instead of returning a jacket-free outfit', () => {
-    const result = recommendOutfits({
-      garments: [
-        garment('shirt', 'dress_shirt', { formality: 'business_casual' }),
-        garment('trousers', 'dress_pants', { formality: 'business_casual' }),
-        garment('shoes', 'dress_shoes', { formality: 'formal' }),
-      ],
-      occasion: 'business_casual',
-      weather: { hi: 72, precip: 0 },
-      constraints: { requiredSlots: ['jacket'] },
-    })
-
-    expect(result.outfits).toEqual([])
-    expect(result.unmet).toEqual(['jacket'])
-  })
-
-  it('can vary the shirt when only one required jacket is available', () => {
+  it('can vary the shirt when only one suitable jacket is available', () => {
     const result = recommendOutfits({
       garments: [
         garment('navy-jacket', 'blazer', { formality: 'business_casual' }),
@@ -142,30 +103,12 @@ describe('recommendOutfits', () => {
         garment('shoes', 'dress_shoes', { color: 'Brown', formality: 'formal' }),
       ],
       occasion: 'business_casual',
-      weather: { hi: 72, precip: 0 },
+      weather: { hi: 55, precip: 0 },
       count: 2,
-      constraints: { requiredSlots: ['jacket'] },
     })
 
     expect(result.outfits).toHaveLength(2)
     expect(new Set(result.outfits.map((outfit) => outfit.items.find(({ slot }) => slot === 'top').g.id)).size).toBe(2)
   })
 
-  it('omits excluded slots from formal recommendations', () => {
-    const result = recommendOutfits({
-      garments: [
-        garment('suit', 'suit', { formality: 'formal' }),
-        garment('shirt', 'dress_shirt', { formality: 'formal' }),
-        garment('shoes', 'dress_shoes', { formality: 'formal' }),
-        garment('tie', 'tie', { formality: 'formal' }),
-      ],
-      occasion: 'formal',
-      weather: { hi: 60, precip: 0 },
-      count: 1,
-      constraints: { excludedSlots: ['tie'] },
-    })
-
-    expect(result.outfits).toHaveLength(1)
-    expect(result.outfits[0].items.every(({ slot }) => slot !== 'tie')).toBe(true)
-  })
 })

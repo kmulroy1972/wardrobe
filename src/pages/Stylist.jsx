@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import GarmentThumb from '../components/GarmentThumb'
 import OutfitSuggestion from '../components/OutfitSuggestion'
 import { useAuth } from '../App'
 import { addWishlistItem, askStylist, getProfile, listGarments, listOutfits, listWishlist } from '../lib/data'
 import { fetchForecast, dayName } from '../lib/weather'
 import { recommendOutfits } from '../lib/outfitEngine'
-import { FORMALITY, SLOT_LABELS } from '../lib/constants'
+import { categoryById, FORMALITY, SLOT_LABELS } from '../lib/constants'
+import { buildStylistQuestion, STYLIST_STARTERS } from '../lib/stylistRequest'
 
 // A sensible category to shop for when an outfit slot has nothing in it
 const GAP_CATEGORY = {
@@ -46,7 +48,9 @@ function GapList({ missing, occasion, city }) {
 
 export default function Stylist() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [garments, setGarments] = useState(null)
+  const [garmentLoadError, setGarmentLoadError] = useState(false)
   const [wx, setWx] = useState(null)
   const [occasion, setOccasion] = useState('business_casual')
   const [city, setCity] = useState('dc')
@@ -58,18 +62,38 @@ export default function Stylist() {
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
-  const [aiStatus, setAiStatus] = useState('unknown') // unknown | ready | no_key
+  const [aiStatus, setAiStatus] = useState('idle') // idle | ready | no_key
   const [context, setContext] = useState(null) // outfits/wishlist/weather cache for the chat
+  const [contextWarning, setContextWarning] = useState([])
   const chatEnd = useRef(null)
+
+  const loadGarments = useCallback(async () => {
+    setGarments(null)
+    setGarmentLoadError(false)
+    try {
+      setGarments(await listGarments())
+    } catch {
+      setGarmentLoadError(true)
+    }
+  }, [])
 
   async function loadContext() {
     if (context) return context
-    const [outfitsData, wishlistData, wxDc, wxHowell] = await Promise.all([
-      listOutfits().catch(() => []),
-      listWishlist().catch(() => []),
-      fetchForecast('dc').catch(() => null),
-      fetchForecast('howell').catch(() => null),
+    const [outfitsResult, wishlistResult, dcResult, howellResult] = await Promise.allSettled([
+      listOutfits(),
+      listWishlist(),
+      fetchForecast('dc'),
+      fetchForecast('howell'),
     ])
+    const unavailable = []
+    if (outfitsResult.status === 'rejected') unavailable.push('saved outfits')
+    if (wishlistResult.status === 'rejected') unavailable.push('shopping list')
+    if (dcResult.status === 'rejected') unavailable.push('D.C. weather')
+    if (howellResult.status === 'rejected') unavailable.push('Howell weather')
+    const outfitsData = outfitsResult.status === 'fulfilled' ? outfitsResult.value : []
+    const wishlistData = wishlistResult.status === 'fulfilled' ? wishlistResult.value : []
+    const wxDc = dcResult.status === 'fulfilled' ? dcResult.value : null
+    const wxHowell = howellResult.status === 'fulfilled' ? howellResult.value : null
     const ctx = {
       outfits: outfitsData.map((o) => ({
         name: o.name,
@@ -81,14 +105,16 @@ export default function Stylist() {
         name: w.name, category: w.category, priority: w.priority, status: w.status, location: w.location,
       })),
       weather: { dc: wxDc?.daily, howell: wxHowell?.daily },
+      unavailable,
     }
     setContext(ctx)
+    setContextWarning(unavailable)
     return ctx
   }
 
   useEffect(() => {
-    listGarments().then(setGarments).catch(() => setGarments([]))
-  }, [])
+    loadGarments()
+  }, [loadGarments])
 
   useEffect(() => {
     setWx(null)
@@ -113,16 +139,21 @@ export default function Stylist() {
     const history = messages.map((m) => ({ role: m.role, content: m.text }))
     setMessages((ms) => [...ms, { role: 'user', text: question }])
     setThinking(true)
+    setAiStatus('idle')
     try {
-      const [profile, ctx] = await Promise.all([getProfile(user.id), loadContext()])
+      const [profile, ctx] = await Promise.all([getProfile(user.id, { createIfMissing: false }), loadContext()])
       const wardrobe = (garments || []).map((g) => ({
         id: g.id, name: g.name, category: g.category, brand: g.brand, size: g.size, color: g.color,
         pattern: g.pattern, material: g.material, location: g.location,
         formality: g.formality, warmth: g.warmth, status: g.status,
         times_worn: g.times_worn, last_worn: g.last_worn, fit_notes: g.fit_notes,
       }))
+      const groundedQuestion = buildStylistQuestion(question, focusedGarment)
+      const requestQuestion = ctx.unavailable.length
+        ? `Context unavailable: ${ctx.unavailable.join(', ')}. Do not infer those details.\n${groundedQuestion}`
+        : groundedQuestion
       const res = await askStylist({
-        question, wardrobe,
+        question: requestQuestion, wardrobe,
         outfits: ctx.outfits, wishlist: ctx.wishlist, weather: ctx.weather,
         profile: { height: profile.height, fit_notes: profile.fit_notes, sizes: profile.sizes },
         history,
@@ -136,12 +167,15 @@ export default function Stylist() {
       }
     } catch (err) {
       let text = `Something went wrong: ${err.message}`
+      setAiStatus('idle')
       try {
         const body = await err.context?.json()
         if (body?.error === 'anthropic_error') {
-          text = /authentication|invalid x-api-key|401/i.test(body.detail || '')
+          const keyRejected = /authentication|invalid x-api-key|401/i.test(body.detail || '')
+          text = keyRejected
             ? 'Your Anthropic API key was rejected — double-check it on the Profile page.'
             : 'The AI service returned an error — try again in a moment.'
+          if (keyRejected) setAiStatus('no_key')
         }
       } catch { /* keep the generic message */ }
       setMessages((ms) => [...ms, { role: 'assistant', text }])
@@ -151,6 +185,17 @@ export default function Stylist() {
   }
 
   const garmentById = (id) => garments?.find((g) => g.id === id)
+  const requestedGarmentId = searchParams.get('garment')
+  const focusedGarment = garments?.find((g) => g.id === requestedGarmentId && g.status === 'active')
+  const selectableGarments = useMemo(() => (
+    (garments || [])
+      .filter((g) => g.status === 'active')
+      .sort((a, b) => categoryById(a.category).label.localeCompare(categoryById(b.category).label) || a.name.localeCompare(b.name))
+  ), [garments])
+
+  function selectGarment(id) {
+    setSearchParams(id ? { garment: id } : {}, { replace: true })
+  }
 
   function renderAiText(text) {
     // Turn [[garment-id]] references into linked chips with the photo
@@ -174,19 +219,75 @@ export default function Stylist() {
       <div className="page-head">
         <div>
           <div className="eyebrow">Your valet</div>
-          <h1>Stylist</h1>
+          <h1>Ask the stylist</h1>
+          <p className="muted" style={{ margin: '6px 0 0' }}>
+            Ask naturally. I’ll use your actual wardrobe, fit notes, wear history, and the weather.
+          </p>
         </div>
       </div>
 
-      <div className="card">
-        <div className="eyebrow" style={{ marginBottom: 8 }}>Ask about your wardrobe</div>
+      <div className="card stylist-ask-card">
+        <div className="spread" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <div className="eyebrow">What do you need?</div>
+            <h2 style={{ marginTop: 4 }}>Ask any wardrobe question</h2>
+          </div>
+          {aiStatus === 'ready' ? (
+            <span className="chip green">Stylist connected</span>
+          ) : aiStatus === 'no_key' ? (
+            <span className="chip">Setup needed</span>
+          ) : null}
+        </div>
+
+        <div className="field stylist-item-picker">
+          <label htmlFor="stylist-garment">Ask about a specific item <span className="muted">(optional)</span></label>
+          <select
+            id="stylist-garment"
+            value={focusedGarment?.id || ''}
+            onChange={(e) => selectGarment(e.target.value)}
+            disabled={garments === null || thinking}
+          >
+            <option value="">{garments === null ? 'Loading your wardrobe…' : 'No specific item'}</option>
+            {selectableGarments.map((g) => (
+              <option key={g.id} value={g.id}>
+                {categoryById(g.category).label}: {g.name}{g.status !== 'active' ? ` · ${g.status}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {focusedGarment && (
+          <div className="stylist-focus" aria-label={`Asking about ${focusedGarment.name}`}>
+            <div className="stylist-focus-photo"><GarmentThumb garment={focusedGarment} /></div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="eyebrow">Asking about this item</div>
+              <strong>{focusedGarment.name}</strong>
+              <div className="muted" style={{ fontSize: '0.76rem' }}>
+                {categoryById(focusedGarment.category).label} · {focusedGarment.location === 'dc' ? 'D.C.' : 'Howell'}
+              </div>
+            </div>
+            <button type="button" className="btn small ghost" onClick={() => selectGarment('')} disabled={thinking}>Clear</button>
+          </div>
+        )}
+        {requestedGarmentId && garments !== null && !focusedGarment && (
+          <p className="form-msg" role="status">
+            That item is not currently available in your closet. <button type="button" className="btn small ghost" onClick={() => selectGarment('')}>Choose another item</button>
+          </p>
+        )}
+
+        <div className="eyebrow" style={{ margin: '16px 0 8px' }}>Try a question</div>
+        <div className="prompt-starters" aria-label="Example questions">
+          {STYLIST_STARTERS.filter((prompt) => focusedGarment || prompt !== 'What goes with this?').map((prompt) => (
+            <button type="button" className="prompt-chip" key={prompt} onClick={() => setDraft(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+
         <div className="chat" aria-live="polite">
           {messages.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
-              Try: “What should I wear to a client dinner in Howell on Friday?” ·
-              “Pack me for two days of Hill meetings” ·
-              “Which of my shirts go with the navy blazer?” ·
-              “What's the biggest gap in my D.C. closet?”
+              Your answer will name the exact pieces it is using. Nothing is saved or changed unless you choose a separate action.
             </p>
           )}
           {messages.map((m, i) => (
@@ -197,20 +298,33 @@ export default function Stylist() {
           {thinking && <div className="bubble ai">Consulting the closet…</div>}
           <div ref={chatEnd} />
         </div>
-        <form onSubmit={send} className="row" style={{ marginTop: 12 }}>
+        <form onSubmit={send} className="stylist-question-row">
           <input
             value={draft} onChange={(e) => setDraft(e.target.value)}
-            placeholder="Ask about outfits, packing, gaps…" aria-label="Ask the stylist"
-            style={{ flex: 1, minWidth: 160, padding: '10px 14px', borderRadius: 999, border: '1px solid var(--hairline)', background: 'var(--paper)', fontFamily: 'var(--body)', fontSize: '0.92rem' }}
+            placeholder={focusedGarment ? 'What goes with this?' : 'Try “Dinner with friends tomorrow”'}
+            aria-label="Ask the stylist"
           />
-          <button className="btn" disabled={thinking || !draft.trim()}>Ask</button>
+          <button className="btn" disabled={thinking || !draft.trim() || garments === null || garmentLoadError}>Ask the stylist</button>
         </form>
-        {aiStatus === 'no_key' && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            One-time setup: paste your Anthropic API key on the Profile page to turn on the chat.
-            The outfit suggestions below work without it.
+        {garmentLoadError && (
+          <p className="form-msg" role="alert">
+            I couldn’t open your wardrobe, so I won’t guess. <button type="button" className="btn small ghost" onClick={loadGarments}>Try again</button>
           </p>
         )}
+        {aiStatus === 'no_key' && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            AI advice needs one-time setup on the <Link to="/profile">Profile page</Link>.
+            The outfit suggestions below still work without it.
+          </p>
+        )}
+        {contextWarning.length > 0 && (
+          <p className="form-msg" role="status">
+            I answered without {contextWarning.join(', ')} because that information could not be loaded. I did not guess it.
+          </p>
+        )}
+        <p className="muted stylist-builder-link">
+          Ready to choose pieces or save a look? <Link to="/outfits/new">Open Build an outfit</Link>.
+        </p>
       </div>
 
       <div className="card">
@@ -247,7 +361,7 @@ export default function Stylist() {
         </div>
       </div>
 
-      {garments === null ? (
+      {garmentLoadError ? null : garments === null ? (
         <p className="muted">Opening the closet…</p>
       ) : rec === null ? (
         <p className="muted">Waiting on the forecast…</p>

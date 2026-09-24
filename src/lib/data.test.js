@@ -3,20 +3,59 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   eq: vi.fn(),
   from: vi.fn(),
+  getUser: vi.fn(),
   maybeSingle: vi.fn(),
   remove: vi.fn(),
   select: vi.fn(),
+  signOut: vi.fn(),
   storageFrom: vi.fn(),
+  upsert: vi.fn(),
 }))
 
 vi.mock('./supabase', () => ({
   supabase: {
+    auth: { getUser: mocks.getUser, signOut: mocks.signOut },
     from: mocks.from,
     storage: { from: mocks.storageFrom },
   },
 }))
 
-import { aiKeyIsSet, deleteGarment, reconcileFailedGarmentSave, removePhotos, saveOutfit } from './data'
+import { aiKeyIsSet, deleteGarment, getProfile, reconcileFailedGarmentSave, removePhotos, saveOutfit } from './data'
+
+describe('getProfile', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.maybeSingle.mockResolvedValue({ data: null, error: null })
+    mocks.eq.mockReturnValue({ maybeSingle: mocks.maybeSingle })
+    mocks.select.mockReturnValue({ eq: mocks.eq })
+    mocks.from.mockReturnValue({ select: mocks.select })
+  })
+
+  it('returns local defaults without writing when the Stylist requests a read-only snapshot', async () => {
+    await expect(getProfile('user-1', { createIfMissing: false })).resolves.toMatchObject({
+      user_id: 'user-1',
+      sizes: {},
+    })
+
+    expect(mocks.from).toHaveBeenCalledTimes(1)
+    expect(mocks.from).toHaveBeenCalledWith('profiles')
+    expect(mocks.getUser).not.toHaveBeenCalled()
+    expect(mocks.upsert).not.toHaveBeenCalled()
+  })
+
+  it('preserves profile creation for the explicit Profile workflow', async () => {
+    const created = { user_id: 'user-1', fit_notes: 'Saved defaults', sizes: {} }
+    const single = vi.fn().mockResolvedValue({ data: created, error: null })
+    mocks.getUser.mockResolvedValue({ error: null })
+    mocks.upsert.mockReturnValue({ select: () => ({ single }) })
+    mocks.from.mockReturnValue({ select: mocks.select, upsert: mocks.upsert })
+
+    await expect(getProfile('user-1')).resolves.toEqual(created)
+
+    expect(mocks.getUser).toHaveBeenCalledTimes(1)
+    expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'user-1' }), { onConflict: 'user_id' })
+  })
+})
 
 describe('aiKeyIsSet', () => {
   beforeEach(() => {
