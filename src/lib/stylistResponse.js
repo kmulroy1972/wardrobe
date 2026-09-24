@@ -1,4 +1,5 @@
 import { categoryById } from './constants'
+import { classifyStylistRequest } from './stylistRequest'
 
 const STORAGE_PREFIX = 'wardrobe-stylist-conversation:'
 
@@ -100,6 +101,43 @@ export function findLatestStylistOutfits(messages = [], garments = []) {
     return parseStylistOutfits(messages[index].text, garments)
   }
   return []
+}
+
+function outfitSignature(outfit) {
+  return outfit.items.map(({ g }) => String(g.id)).sort().join('|')
+}
+
+function appendDistinctOutfits(current, additions) {
+  const seen = new Set(current.map(outfitSignature))
+  const next = [...current]
+  for (const outfit of additions) {
+    const signature = outfitSignature(outfit)
+    if (seen.has(signature)) continue
+    seen.add(signature)
+    next.push(outfit)
+  }
+  return next
+}
+
+export function buildStylistConversationOutfits(messages = [], garments = []) {
+  let current = []
+  let requestMode = 'new'
+
+  for (const message of messages) {
+    if (message?.role === 'user') {
+      requestMode = message.requestMode || classifyStylistRequest(message.text)
+      continue
+    }
+    if (message?.role !== 'assistant') continue
+
+    const parsed = parseStylistOutfits(message.text, garments)
+    if (parsed.length === 0) continue
+    current = requestMode === 'add' || requestMode === 'continue'
+      ? appendDistinctOutfits(current, parsed)
+      : parsed
+  }
+
+  return current
 }
 
 export function collectRecentRecommendationUsage(messages = [], garments = [], answerLimit = 4) {

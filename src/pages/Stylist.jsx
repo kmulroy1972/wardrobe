@@ -7,10 +7,10 @@ import { useAuth } from '../App'
 import { askStylist, getProfile, listGarments, listOutfits, listWishlist } from '../lib/data'
 import { fetchForecast } from '../lib/weather'
 import { categoryById } from '../lib/constants'
-import { buildStylistQuestion, STYLIST_STARTERS } from '../lib/stylistRequest'
+import { buildStylistQuestion, classifyStylistRequest, STYLIST_STARTERS } from '../lib/stylistRequest'
 import {
+  buildStylistConversationOutfits,
   collectRecentRecommendationUsage,
-  findLatestStylistOutfits,
   loadStylistConversation,
   parseStylistResponse,
   saveStylistConversation,
@@ -99,9 +99,10 @@ export default function Stylist() {
   async function ask(questionText) {
     const question = questionText.trim()
     if (!question || thinking) return
+    const requestMode = classifyStylistRequest(question)
     setDraft('')
     const history = messages.map((m) => ({ role: m.role, content: m.text }))
-    const nextMessages = [...messages, { role: 'user', text: question }]
+    const nextMessages = [...messages, { role: 'user', text: question, requestMode }]
     setMessages(nextMessages)
     setThinking(true)
     setAiStatus('idle')
@@ -114,7 +115,7 @@ export default function Stylist() {
         times_worn: g.times_worn, last_worn: g.last_worn, fit_notes: g.fit_notes,
       }))
       const recentRecommendations = collectRecentRecommendationUsage(messages, garments || [])
-      const groundedQuestion = buildStylistQuestion(question, focusedGarment, recentRecommendations)
+      const groundedQuestion = buildStylistQuestion(question, focusedGarment, recentRecommendations, requestMode)
       const requestQuestion = ctx.unavailable.length
         ? `Context unavailable: ${ctx.unavailable.join(', ')}. Do not infer those details.\n${groundedQuestion}`
         : groundedQuestion
@@ -164,8 +165,9 @@ export default function Stylist() {
   ), [garments])
   const visualRecommendations = useMemo(() => {
     if (!garments) return []
-    return findLatestStylistOutfits(messages, garments)
+    return buildStylistConversationOutfits(messages, garments)
   }, [messages, garments])
+  const visibleMessages = messages.slice(-4)
 
   function selectGarment(id) {
     setSearchParams(id ? { garment: id } : {}, { replace: true })
@@ -280,7 +282,10 @@ export default function Stylist() {
               Your answer will name the exact pieces it is using. Nothing is saved or changed unless you choose a separate action.
             </p>
           )}
-          {messages.map((m, i) => (
+          {messages.length > visibleMessages.length && (
+            <p className="muted stylist-earlier-note">Earlier questions are still remembered. Showing the latest conversation.</p>
+          )}
+          {visibleMessages.map((m, i) => (
             <div key={i} className={`bubble ${m.role === 'user' ? 'me' : 'ai'}`}>
               {m.role === 'assistant' ? renderAiText(m.text) : m.text}
             </div>

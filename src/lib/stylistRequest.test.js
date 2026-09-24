@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildStylistQuestion, stylistPathForGarment } from './stylistRequest'
+import { buildStylistQuestion, classifyStylistRequest, stylistPathForGarment } from './stylistRequest'
 
 describe('buildStylistQuestion', () => {
   it('passes through an ordinary question when no garment is selected', () => {
     const result = buildStylistQuestion('  Dinner with friends tomorrow  ')
 
     expect(result).toContain('User question: Dinner with friends tomorrow')
-    expect(result).toContain('return every complete revised outfit')
+    expect(result).toContain('Return the complete requested outfit')
     expect(result).toContain('[[catalog id]]')
   })
 
@@ -34,7 +34,7 @@ describe('buildStylistQuestion', () => {
     const result = buildStylistQuestion('Make the second one warmer.')
 
     expect(result).toContain('User question: Make the second one warmer.')
-    expect(result).toContain('After a follow-up, return every complete revised outfit')
+    expect(result).toContain('Return every complete current revised outfit')
   })
 
   it('requires distinct core pieces when multiple outfits are requested', () => {
@@ -54,8 +54,48 @@ describe('buildStylistQuestion', () => {
     expect(result).toContain('Recently recommended garments')
     expect(result).toContain('Gray jacket')
     expect(result).toContain('"count":3')
-    expect(result).toContain('For a new request, favor suitable active alternatives')
-    expect(result).toContain('For a follow-up, preserve every piece the user did not ask to change')
+    expect(result).toContain('Favor suitable active alternatives')
+  })
+
+  it('asks for only the new outfit after an additive follow-up', () => {
+    const result = buildStylistQuestion('Give me one more outfit.')
+
+    expect(result).toContain('Return only the new additional outfit')
+    expect(result).toContain('Do not repeat earlier outfits')
+    expect(result).not.toContain('Return every complete current revised outfit')
+  })
+
+  it('asks a continuation to finish only the missing content', () => {
+    const result = buildStylistQuestion('Please continue the outfit recommendations from where you stopped.')
+
+    expect(result).toContain('Return the complete outfit that was cut off')
+    expect(result).toContain('Do not repeat any complete outfit')
+  })
+})
+
+describe('classifyStylistRequest', () => {
+  it.each([
+    'Give me one more outfit.',
+    'Give me another outfit.',
+    'Please add one additional look.',
+  ])('classifies an additive request: %s', (question) => {
+    expect(classifyStylistRequest(question)).toBe('add')
+  })
+
+  it.each([
+    'Change the shirt in outfit 2.',
+    'Make the second one warmer.',
+    'I wore that jacket today.',
+  ])('classifies a revision request: %s', (question) => {
+    expect(classifyStylistRequest(question)).toBe('revise')
+  })
+
+  it('keeps a new multi-outfit request separate from an additive follow-up', () => {
+    expect(classifyStylistRequest('Give me two different looks without a tie.')).toBe('new')
+  })
+
+  it('recognizes a continuation after an answer is cut off', () => {
+    expect(classifyStylistRequest('Please continue the outfit recommendations from where you stopped.')).toBe('continue')
   })
 })
 

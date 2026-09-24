@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  buildStylistConversationOutfits,
   collectRecentRecommendationUsage,
   findLatestStylistOutfits,
   loadStylistConversation,
@@ -142,6 +143,71 @@ Outfit 2 — Tan/Blue
       { id: 'pants-2', name: 'di Sondrio khaki lightweight cotton chino', count: 1 },
       { id: 'shirt-1', name: 'Light blue Mayfair wrinkle-resistant houndstooth dress shirt', count: 1 },
       { id: 'shirt-2', name: 'Blue and lavender tattersall performance dress shirt', count: 1 },
+    ])
+  })
+})
+
+describe('buildStylistConversationOutfits', () => {
+  const first = 'Outfit 1 — Gray dinner look\n- Reda grey wool hopsack Bedford jacket\n- Light blue houndstooth dress shirt\n- Oat lightweight stretch chino'
+  const second = 'Outfit 2 — Tan dinner look\n- di Fabio tan wool-linen hopsack Bedford jacket\n- Blue/lavender tattersall performance shirt\n- Khaki lightweight chino'
+  const third = 'Outfit 3 — Mixed dinner look\n- di Fabio tan wool-linen hopsack Bedford jacket\n- Light blue houndstooth dress shirt\n- Oat lightweight stretch chino'
+
+  it('appends only the new visual after “one more outfit”', () => {
+    const messages = [
+      { role: 'user', text: 'Give me a business casual outfit.' },
+      { role: 'assistant', text: first },
+      { role: 'user', text: 'Give me one more outfit.' },
+      { role: 'assistant', text: second },
+    ]
+
+    expect(buildStylistConversationOutfits(messages, outfitGarments).map(({ name }) => name)).toEqual([
+      'Gray dinner look',
+      'Tan dinner look',
+    ])
+  })
+
+  it('does not add a duplicate outfit when the stylist repeats one', () => {
+    const messages = [
+      { role: 'user', text: 'Give me a business casual outfit.' },
+      { role: 'assistant', text: first },
+      { role: 'user', text: 'Give me another outfit.' },
+      { role: 'assistant', text: first },
+    ]
+
+    expect(buildStylistConversationOutfits(messages, outfitGarments)).toHaveLength(1)
+  })
+
+  it('replaces the current visual set with a complete revision', () => {
+    const revisedFirst = 'Outfit 1 — Revised gray look\n- Reda grey wool hopsack Bedford jacket\n- Blue/lavender tattersall performance shirt\n- Oat lightweight stretch chino'
+    const messages = [
+      { role: 'user', text: 'Give me two outfits.' },
+      { role: 'assistant', text: `${first}\n\n${second}` },
+      { role: 'user', text: 'Change the shirt in outfit 1.' },
+      { role: 'assistant', text: `${revisedFirst}\n\n${second}` },
+    ]
+
+    const result = buildStylistConversationOutfits(messages, outfitGarments)
+    expect(result).toHaveLength(2)
+    expect(result[0].name).toBe('Revised gray look')
+    expect(result[0].items.map(({ g }) => g.id)).toContain('shirt-2')
+  })
+
+  it('keeps earlier visuals and appends the completed outfit after a continuation', () => {
+    const messages = [
+      { role: 'user', text: 'Give me a business casual outfit.' },
+      { role: 'assistant', text: first },
+      { role: 'user', text: 'Give me one more outfit.' },
+      { role: 'assistant', text: second },
+      { role: 'user', text: 'Give me one more outfit.' },
+      { role: 'assistant', text: 'Outfit 3 — Mixed dinner look\n- di Fabio tan wool-linen hopsack Bedford jacket [[' },
+      { role: 'user', text: 'Please continue the outfit recommendations from where you stopped.' },
+      { role: 'assistant', text: third },
+    ]
+
+    expect(buildStylistConversationOutfits(messages, outfitGarments).map(({ name }) => name)).toEqual([
+      'Gray dinner look',
+      'Tan dinner look',
+      'Mixed dinner look',
     ])
   })
 })
