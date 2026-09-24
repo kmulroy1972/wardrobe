@@ -10,6 +10,7 @@ import { recommendOutfits } from '../lib/outfitEngine'
 import { categoryById, FORMALITY, SLOT_LABELS } from '../lib/constants'
 import { buildStylistQuestion, STYLIST_STARTERS } from '../lib/stylistRequest'
 import { loadStylistConversation, parseStylistResponse, saveStylistConversation } from '../lib/stylistResponse'
+import { buildStylistRecommendations, findLatestOutfitQuestion } from '../lib/stylistRecommendations'
 
 // A sensible category to shop for when an outfit slot has nothing in it
 const GAP_CATEGORY = {
@@ -209,6 +210,18 @@ export default function Stylist() {
       .filter((g) => g.status === 'active')
       .sort((a, b) => categoryById(a.category).label.localeCompare(categoryById(b.category).label) || a.name.localeCompare(b.name))
   ), [garments])
+  const latestOutfitQuestion = useMemo(() => findLatestOutfitQuestion(messages), [messages])
+  const visualRecommendations = useMemo(() => {
+    if (!latestOutfitQuestion || !garments) return null
+    return buildStylistRecommendations({
+      question: latestOutfitQuestion,
+      garments,
+      occasion,
+      location: city,
+      weather: wx?.daily?.[dayIdx],
+      selectedGarment: focusedGarment,
+    })
+  }, [latestOutfitQuestion, garments, occasion, city, wx, dayIdx, focusedGarment])
 
   function selectGarment(id) {
     setSearchParams(id ? { garment: id } : {}, { replace: true })
@@ -344,6 +357,34 @@ export default function Stylist() {
           {thinking && <div className="bubble ai">Consulting the closet…</div>}
           <div ref={chatEnd} />
         </div>
+        {visualRecommendations?.outfits.length > 0 && (
+          <section className="stack stylist-visual-outfits" aria-label="Visual outfit recommendations">
+            <div className="recommendation-head">
+              <div className="eyebrow">Complete visual answer</div>
+              <h2>
+                {visualRecommendations.outfits.length}{' '}
+                {visualRecommendations.outfits.length === 1 ? 'outfit' : 'outfits'} from your closet
+              </h2>
+              <p className="muted">Click any garment image to enlarge it. Use “Back to outfit” to return here without losing anything.</p>
+            </div>
+            {visualRecommendations.outfits.map((outfit, index) => (
+              <OutfitSuggestion
+                key={`${outfit.name}-${index}`}
+                outfit={outfit}
+                occasion={occasion}
+                location={focusedGarment?.location || city}
+                onGarmentClick={setPreviewGarment}
+              />
+            ))}
+            {visualRecommendations.missing.length > 0 && (
+              <div className="stylist-visual-gap">
+                <strong>Still needed to finish the look:</strong>{' '}
+                {visualRecommendations.missing.map((slot) => SLOT_LABELS[slot] || slot).join(', ')}.
+                The pictured pieces above are still usable now.
+              </div>
+            )}
+          </section>
+        )}
         {messages.length > 0 && <p className="muted stylist-saved-note">This conversation stays in this browser tab if you leave and come back.</p>}
         <form onSubmit={send} className="stylist-question-row">
           <input
@@ -408,7 +449,7 @@ export default function Stylist() {
         </div>
       </div>
 
-      {garmentLoadError ? null : garments === null ? (
+      {visualRecommendations?.outfits.length > 0 ? null : garmentLoadError ? null : garments === null ? (
         <p className="muted">Opening the closet…</p>
       ) : rec === null ? (
         <p className="muted">Waiting on the forecast…</p>
@@ -427,7 +468,13 @@ export default function Stylist() {
       ) : (
         <div className="stack">
           {rec.outfits.map((o, i) => (
-            <OutfitSuggestion key={o.name + i + shuffle} outfit={o} occasion={occasion} location={city} />
+            <OutfitSuggestion
+              key={o.name + i + shuffle}
+              outfit={o}
+              occasion={occasion}
+              location={city}
+              onGarmentClick={setPreviewGarment}
+            />
           ))}
           {rec.missing.length > 0 && (
             <GapList missing={rec.missing} occasion={occasion} city={city} />

@@ -111,4 +111,50 @@ describe('recommendOutfits', () => {
     expect(new Set(result.outfits.map((outfit) => outfit.items.find(({ slot }) => slot === 'top').g.id)).size).toBe(2)
   })
 
+  it('returns visual jacket, shirt, and trouser outfits when shoes are the only missing piece', () => {
+    const result = recommendOutfits({
+      garments: [
+        garment('grey-jacket', 'blazer', { formality: 'business_casual' }),
+        garment('navy-jacket', 'blazer', { formality: 'business_casual' }),
+        garment('blue-shirt', 'dress_shirt', { color: 'Light blue', formality: 'business_casual' }),
+        garment('white-shirt', 'dress_shirt', { color: 'White', formality: 'business_casual' }),
+        garment('trousers', 'dress_pants', { color: 'Gray', formality: 'business_casual' }),
+      ],
+      occasion: 'business_casual',
+      weather: { hi: 55, precip: 0 },
+      count: 2,
+      constraints: { requiredSlots: ['jacket'], excludedSlots: ['tie'] },
+    })
+
+    expect(result.outfits).toHaveLength(2)
+    expect(result.missing).toEqual(['shoes'])
+    expect(result.outfits.map((outfit) => outfit.items.map(({ slot }) => slot))).toEqual([
+      ['jacket', 'top', 'bottom'],
+      ['jacket', 'top', 'bottom'],
+    ])
+    expect(new Set(result.outfits.map((outfit) => outfit.items.find(({ slot }) => slot === 'jacket').g.id)).size).toBe(2)
+  })
+
+  it('keeps a selected garment in every visual recommendation', () => {
+    const result = recommendOutfits({
+      garments: [
+        garment('selected-jacket', 'blazer', { formality: 'business_casual' }),
+        garment('other-jacket', 'blazer', { formality: 'business_casual' }),
+        garment('blue-shirt', 'dress_shirt', { color: 'Light blue', formality: 'business_casual' }),
+        garment('white-shirt', 'dress_shirt', { color: 'White', formality: 'business_casual' }),
+        garment('trousers', 'dress_pants', { color: 'Gray', formality: 'business_casual' }),
+        garment('shoes', 'dress_shoes', { color: 'Brown', formality: 'formal' }),
+      ],
+      occasion: 'business_casual',
+      weather: { hi: 55, precip: 0 },
+      count: 2,
+      constraints: { anchorGarmentId: 'selected-jacket' },
+    })
+
+    expect(result.outfits).toHaveLength(2)
+    expect(result.outfits.every((outfit) => (
+      outfit.items.some(({ g }) => g.id === 'selected-jacket')
+    ))).toBe(true)
+  })
+
 })

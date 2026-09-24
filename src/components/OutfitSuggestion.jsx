@@ -3,7 +3,7 @@ import FlatLay from './FlatLay'
 import { categoryById, SLOT_LABELS } from '../lib/constants'
 import { saveOutfit } from '../lib/data'
 
-export default function OutfitSuggestion({ outfit, occasion, location }) {
+export default function OutfitSuggestion({ outfit, occasion, location, onGarmentClick }) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState(null)
@@ -36,7 +36,7 @@ export default function OutfitSuggestion({ outfit, occasion, location }) {
         </button>
       </div>
       <div style={{ margin: '10px 0' }}>
-        <FlatLay items={outfit.items} />
+        <FlatLay items={outfit.items} onGarmentClick={onGarmentClick} />
       </div>
       <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: '0.88rem' }}>
         {outfit.items.map(({ slot, g }) => (

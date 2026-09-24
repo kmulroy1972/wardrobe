@@ -206,6 +206,8 @@ h3 { font-size: 1.05rem; }
   border-radius: 12px; padding: 10px;
 }
 .flatlay .tile { border-radius: 9px; overflow: hidden; background: var(--paper); border: 1px solid var(--hairline); }
+.flatlay button.tile { padding: 0; cursor: zoom-in; color: inherit; font: inherit; }
+.flatlay button.tile:hover, .flatlay button.tile:focus-visible { border-color: var(--brass); outline: 2px solid color-mix(in srgb, var(--brass) 35%, transparent); }
 .flatlay .tile.big { grid-column: span 2; grid-row: span 3; }
 .flatlay .tile.tall { grid-column: span 2; grid-row: span 2; }
 .flatlay .tile.small { grid-column: span 1; grid-row: span 1; }
@@ -289,6 +291,14 @@ h3 { font-size: 1.05rem; }
   color: var(--claret); padding: 5px 9px; font: 600 0.72rem var(--body); cursor: pointer;
 }
 .stylist-saved-note { margin: 8px 0 0; font-size: 0.76rem; }
+.stylist-visual-outfits { margin-top: 18px; }
+.stylist-visual-outfits .recommendation-head h2 { margin: 4px 0; }
+.stylist-visual-outfits .recommendation-head p { margin: 0; }
+.stylist-visual-outfits > .card { background: var(--cloth); }
+.stylist-visual-gap {
+  padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 10px;
+  background: var(--paper); color: var(--ink-soft); font-size: 0.82rem;
+}
 
 .garment-preview-backdrop {
   position: fixed; inset: 0; z-index: 100;
