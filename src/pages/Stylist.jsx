@@ -12,10 +12,39 @@ import {
   buildStylistConversationOutfits,
   collectRecentRecommendationUsage,
   loadStylistConversation,
+  parseStylistOutfits,
   parseStylistResponse,
   saveStylistConversation,
   stylistHistory,
 } from '../lib/stylistResponse'
+import { buildStylistConversationPlan, buildStylistLocalTurn } from '../lib/stylistLocalPlanner'
+
+function currentConversationOutfits(messages, garments, focusedGarment) {
+  const plan = buildStylistConversationPlan(messages, garments, focusedGarment)
+  const conversationOutfits = buildStylistConversationOutfits(messages, garments)
+  let anchorIndex = -1
+
+  messages.forEach((message, index) => {
+    if (message?.role !== 'user') return
+    const mode = message.requestMode || classifyStylistRequest(message.text)
+    if (mode === 'visual' || mode === 'add' || mode === 'continue') return
+    anchorIndex = index
+  })
+
+  if (anchorIndex < 0) return conversationOutfits
+  const laterUsers = messages.slice(anchorIndex + 1).filter((message) => message?.role === 'user')
+  if (laterUsers.some((message) => {
+    const mode = message.requestMode || classifyStylistRequest(message.text)
+    return mode === 'add' || mode === 'continue'
+  })) {
+    return conversationOutfits.length > 0 ? conversationOutfits : (plan?.outfits || [])
+  }
+
+  const directAnswer = messages.slice(anchorIndex + 1).find((message) => message?.role === 'assistant')
+  const directOutfits = directAnswer ? parseStylistOutfits(directAnswer.text, garments) : []
+  if (directOutfits.length > 0) return directOutfits
+  return plan?.outfits || []
+}
 
 export default function Stylist() {
   const { user } = useAuth()
@@ -104,7 +133,7 @@ export default function Stylist() {
     const question = questionText.trim()
     if (!question || thinking) return
     const requestMode = classifyStylistRequest(question)
-    const currentOutfits = buildStylistConversationOutfits(messages, garments || [])
+    const currentOutfits = currentConversationOutfits(messages, garments || [], focusedGarment)
     setDraft('')
     const nextMessages = [...messages, { role: 'user', text: question, requestMode }]
     if (shouldShowCurrentOutfits(question, currentOutfits.length)) {
@@ -114,6 +143,21 @@ export default function Stylist() {
         kind: 'notice',
         showVisuals: true,
       }])
+      return
+    }
+    const localTurn = buildStylistLocalTurn({
+      question,
+      messages,
+      garments: garments || [],
+      selectedGarment: focusedGarment,
+    })
+    if (localTurn.handled) {
+      setMessages([...nextMessages, {
+        role: 'assistant',
+        text: localTurn.text,
+        ...(localTurn.showVisuals ? { showVisuals: true } : {}),
+      }])
+      setAiStatus('idle')
       return
     }
     const history = stylistHistory(messages)
@@ -152,7 +196,10 @@ export default function Stylist() {
           }])
         } else {
           setAiStatus('idle')
-          setMessages((ms) => [...ms, { role: 'assistant', kind: 'notice', text: 'The stylist did not return an answer. Your existing outfit plan is still below; please try the question again.' }])
+          const text = currentOutfits.length > 0
+            ? 'The stylist did not return an answer. Your current outfit cards are still shown below; try asking again or request a change to one look.'
+            : 'The stylist did not return an answer, so no outfit cards were created. Your closet was not changed; please try again with the occasion and dress code.'
+          setMessages((ms) => [...ms, { role: 'assistant', kind: 'notice', text }])
         }
       }
     } catch (err) {
@@ -168,7 +215,10 @@ export default function Stylist() {
           if (keyRejected) setAiStatus('no_key')
         }
       } catch { /* keep the generic message */ }
-      setMessages((ms) => [...ms, { role: 'assistant', kind: 'notice', text }])
+      const status = currentOutfits.length > 0
+        ? 'Your current outfit cards are still shown below.'
+        : 'No outfit cards were created and your closet was not changed.'
+      setMessages((ms) => [...ms, { role: 'assistant', kind: 'notice', text: `${text} ${status}` }])
     } finally {
       setThinking(false)
     }
@@ -188,8 +238,8 @@ export default function Stylist() {
   ), [garments])
   const visualRecommendations = useMemo(() => {
     if (!garments) return []
-    return buildStylistConversationOutfits(messages, garments)
-  }, [messages, garments])
+    return currentConversationOutfits(messages, garments, focusedGarment)
+  }, [messages, garments, focusedGarment])
   const visibleMessages = messages.slice(-4)
 
   function selectGarment(id) {
@@ -233,7 +283,7 @@ export default function Stylist() {
           <div className="eyebrow">Your valet</div>
           <h1>Ask the stylist</h1>
           <p className="muted" style={{ margin: '6px 0 0' }}>
-            Ask naturally. I’ll use your actual wardrobe, fit notes, wear history, and the weather.
+            Ask naturally. Outfit cards use your active closet and wear history; broader advice can use your fit notes and available weather.
           </p>
         </div>
         {messages.length > 0 && (

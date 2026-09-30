@@ -139,7 +139,7 @@ function buildTips({ outfit, occasion, wBand, rain }) {
   return tips.slice(0, 3)
 }
 
-function nameOutfit(outfit) {
+export function nameOutfit(outfit) {
   const bySlot = {}
   for (const { slot, g } of outfit) bySlot[slot] = g
   const anchor = bySlot.suit || bySlot.jacket || bySlot.top
@@ -185,15 +185,16 @@ export function recommendOutfits({ garments, occasion, weather, count = 3, const
       .sort((a, b) => b.s - a.s)
       .slice(0, 5)
   }
-  if (anchorSlot && bySlot[anchorSlot]) {
-    bySlot[anchorSlot] = bySlot[anchorSlot].filter(({ g }) => g.id === anchor.id)
-  }
   const outers = pool
     .filter((g) => g.category === 'outerwear')
     .map((g) => ({ g, s: garmentScore(g, occasion, wBand) }))
     .filter((x) => x.s >= 0)
     .sort((a, b) => b.s - a.s)
     .slice(0, 3)
+  bySlot.outer = outers
+  if (anchorSlot && bySlot[anchorSlot]) {
+    bySlot[anchorSlot] = bySlot[anchorSlot].filter(({ g }) => g.id === anchor.id)
+  }
   const coldAccessories = pool.filter((g) => ['scarf', 'gloves', 'hat'].includes(g.category))
 
   // Formal prefers a full suit; separates are the fallback
@@ -237,8 +238,11 @@ export function recommendOutfits({ garments, occasion, weather, count = 3, const
           if (b) outfit.push({ slot: 'bottom', g: b.g })
           if (sh) outfit.push({ slot: 'shoes', g: sh.g })
 
-          // Cold-weather knit layer when available (not over a formal suit)
-          if (!excludedSlots.has('layer') && (wBand === 'cool' || wBand === 'cold') && bySlot.layer?.length && !useSuit) {
+          // Add a knit for cold weather or when explicitly requested, but not over a formal suit.
+          if (!excludedSlots.has('layer')
+            && (requiredSlots.has('layer') || wBand === 'cool' || wBand === 'cold')
+            && bySlot.layer?.length
+            && !useSuit) {
             outfit.push({ slot: 'layer', g: bySlot.layer[0].g })
           }
           if (!excludedSlots.has('tie') && occasion === 'formal' && bySlot.tie?.length) outfit.push({ slot: 'tie', g: bySlot.tie[0].g })
@@ -246,8 +250,10 @@ export function recommendOutfits({ garments, occasion, weather, count = 3, const
           if (!excludedSlots.has('accessory') && occasion === 'formal' && bySlot.accessory?.length) {
             outfit.push({ slot: 'accessory', g: bySlot.accessory[0].g })
           }
-          if (!excludedSlots.has('outer') && (wBand === 'cold' || (wBand === 'cool' && rain)) && outers.length) {
-            outfit.push({ slot: 'outer', g: outers[0].g })
+          if (!excludedSlots.has('outer')
+            && (requiredSlots.has('outer') || wBand === 'cold' || (wBand === 'cool' && rain))
+            && bySlot.outer?.length) {
+            outfit.push({ slot: 'outer', g: bySlot.outer[0].g })
           }
           if (!excludedSlots.has('accessory') && wBand === 'cold' && coldAccessories.length) {
             outfit.push({ slot: 'accessory', g: coldAccessories[0] })
