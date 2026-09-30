@@ -7,13 +7,14 @@ import { useAuth } from '../App'
 import { askStylist, getProfile, listGarments, listOutfits, listWishlist } from '../lib/data'
 import { fetchForecast } from '../lib/weather'
 import { categoryById } from '../lib/constants'
-import { buildStylistQuestion, classifyStylistRequest, STYLIST_STARTERS } from '../lib/stylistRequest'
+import { buildStylistQuestion, classifyStylistRequest, shouldShowCurrentOutfits, STYLIST_STARTERS } from '../lib/stylistRequest'
 import {
   buildStylistConversationOutfits,
   collectRecentRecommendationUsage,
   loadStylistConversation,
   parseStylistResponse,
   saveStylistConversation,
+  stylistHistory,
 } from '../lib/stylistResponse'
 
 export default function Stylist() {
@@ -34,6 +35,7 @@ export default function Stylist() {
   const [contextWarning, setContextWarning] = useState([])
   const [previewGarment, setPreviewGarment] = useState(null)
   const chatEnd = useRef(null)
+  const visualsStart = useRef(null)
 
   const loadGarments = useCallback(async () => {
     setGarments(null)
@@ -85,7 +87,9 @@ export default function Stylist() {
   }, [loadGarments])
 
   useEffect(() => {
-    chatEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    const latest = messages.at(-1)
+    if (latest?.showVisuals) visualsStart.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    else chatEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, thinking])
 
   useEffect(() => {
@@ -100,9 +104,19 @@ export default function Stylist() {
     const question = questionText.trim()
     if (!question || thinking) return
     const requestMode = classifyStylistRequest(question)
+    const currentOutfits = buildStylistConversationOutfits(messages, garments || [])
     setDraft('')
-    const history = messages.map((m) => ({ role: m.role, content: m.text }))
     const nextMessages = [...messages, { role: 'user', text: question, requestMode }]
+    if (shouldShowCurrentOutfits(question, currentOutfits.length)) {
+      setMessages([...nextMessages, {
+        role: 'assistant',
+        text: `Here ${currentOutfits.length === 1 ? 'is the outfit' : 'are the outfits'} from our current plan, shown below with your closet photos. Click a piece to see it larger.`,
+        kind: 'notice',
+        showVisuals: true,
+      }])
+      return
+    }
+    const history = stylistHistory(messages)
     setMessages(nextMessages)
     setThinking(true)
     setAiStatus('idle')
@@ -115,7 +129,7 @@ export default function Stylist() {
         times_worn: g.times_worn, last_worn: g.last_worn, fit_notes: g.fit_notes,
       }))
       const recentRecommendations = collectRecentRecommendationUsage(messages, garments || [])
-      const groundedQuestion = buildStylistQuestion(question, focusedGarment, recentRecommendations, requestMode)
+      const groundedQuestion = buildStylistQuestion(question, focusedGarment, recentRecommendations, requestMode, currentOutfits)
       const requestQuestion = ctx.unavailable.length
         ? `Context unavailable: ${ctx.unavailable.join(', ')}. Do not infer those details.\n${groundedQuestion}`
         : groundedQuestion
@@ -127,10 +141,19 @@ export default function Stylist() {
       })
       if (res?.error === 'no_key') {
         setAiStatus('no_key')
-        setMessages((ms) => [...ms, { role: 'assistant', text: 'The AI stylist isn’t connected yet — an Anthropic API key needs to be added on the Profile page.' }])
+        setMessages((ms) => [...ms, { role: 'assistant', kind: 'notice', text: 'The AI stylist isn’t connected yet — an Anthropic API key needs to be added on the Profile page.' }])
       } else {
-        setAiStatus('ready')
-        setMessages((ms) => [...ms, { role: 'assistant', text: res?.text || 'No answer came back — try again.' }])
+        const answer = res?.text?.trim()
+        if (answer) {
+          setAiStatus('ready')
+          setMessages((ms) => [...ms, {
+            role: 'assistant', text: answer, truncated: Boolean(res?.truncated),
+            showVisuals: requestMode === 'visual',
+          }])
+        } else {
+          setAiStatus('idle')
+          setMessages((ms) => [...ms, { role: 'assistant', kind: 'notice', text: 'The stylist did not return an answer. Your existing outfit plan is still below; please try the question again.' }])
+        }
       }
     } catch (err) {
       let text = `Something went wrong: ${err.message}`
@@ -145,7 +168,7 @@ export default function Stylist() {
           if (keyRejected) setAiStatus('no_key')
         }
       } catch { /* keep the generic message */ }
-      setMessages((ms) => [...ms, { role: 'assistant', text }])
+      setMessages((ms) => [...ms, { role: 'assistant', kind: 'notice', text }])
     } finally {
       setThinking(false)
     }
@@ -182,12 +205,12 @@ export default function Stylist() {
     setAiStatus('idle')
   }
 
-  function renderAiText(text) {
-    const parsed = parseStylistResponse(text)
+  function renderAiText(message) {
+    const parsed = parseStylistResponse(message.text)
     return (
       <>
         <span>{parsed.text}</span>
-        {parsed.truncated && (
+        {(parsed.truncated || message.truncated) && (
           <span className="stylist-truncated">
             This answer stopped early.
             <button
@@ -287,14 +310,14 @@ export default function Stylist() {
           )}
           {visibleMessages.map((m, i) => (
             <div key={i} className={`bubble ${m.role === 'user' ? 'me' : 'ai'}`}>
-              {m.role === 'assistant' ? renderAiText(m.text) : m.text}
+              {m.role === 'assistant' ? renderAiText(m) : m.text}
             </div>
           ))}
           {thinking && <div className="bubble ai">Consulting the closet…</div>}
           <div ref={chatEnd} />
         </div>
         {visualRecommendations.length > 0 && (
-          <section className="stack stylist-visual-outfits" aria-label="Visual outfit recommendations">
+          <section ref={visualsStart} className="stack stylist-visual-outfits" aria-label="Visual outfit recommendations">
             <div className="recommendation-head">
               <div className="eyebrow">Your outfits</div>
               <h2>

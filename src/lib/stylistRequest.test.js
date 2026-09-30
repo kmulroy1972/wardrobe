@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildStylistQuestion, classifyStylistRequest, stylistPathForGarment } from './stylistRequest'
+import { buildStylistQuestion, classifyStylistRequest, shouldShowCurrentOutfits, stylistPathForGarment } from './stylistRequest'
 
 describe('buildStylistQuestion', () => {
   it('passes through an ordinary question when no garment is selected', () => {
@@ -37,12 +37,33 @@ describe('buildStylistQuestion', () => {
     expect(result).toContain('Return every complete current revised outfit')
   })
 
-  it('requires distinct core pieces when multiple outfits are requested', () => {
+  it('plans distinct looks while respecting the available closet', () => {
     const result = buildStylistQuestion('Give me two business casual outfits.')
 
     expect(result).toContain('Never return the same complete outfit twice')
-    expect(result).toContain('different jacket or suit, shirt or top, and trousers or bottom')
-    expect(result).toContain('compare the catalog IDs across every outfit')
+    expect(result).toContain('For separate looks without packing constraints, vary core pieces')
+    expect(result).toContain('Compare all selected catalog IDs across days')
+  })
+
+  it('optimizes a multi-day conference capsule and carries its current plan into a revision', () => {
+    const currentOutfits = [{
+      name: 'Thursday evening',
+      items: [{ slot: 'jacket', g: { id: 'mocha-1', name: 'Mocha Bedford jacket' } }],
+    }]
+    const result = buildStylistQuestion(
+      'For my conference, change the Friday shirt but keep both blazers.',
+      null,
+      [],
+      'revise',
+      currentOutfits,
+    )
+
+    expect(result).toContain('Current outfit plan from this conversation')
+    expect(result).toContain('"id":"mocha-1"')
+    expect(result).toContain('This is a travel capsule')
+    expect(result).toContain('reuse suitable jackets, trousers, shoes, and belts')
+    expect(result).toContain('Return every complete current revised outfit')
+    expect(buildStylistQuestion('Change the Friday shirt.', null, [], 'revise', currentOutfits)).toContain('This is a travel capsule')
   })
 
   it('tells a fresh request to rotate away from recently recommended garments', () => {
@@ -96,6 +117,14 @@ describe('classifyStylistRequest', () => {
 
   it('recognizes a continuation after an answer is cut off', () => {
     expect(classifyStylistRequest('Please continue the outfit recommendations from where you stopped.')).toBe('continue')
+  })
+
+  it('recognizes a request to see existing outfit photos', () => {
+    const question = 'Please give me visuals or images of these outfits.'
+    expect(classifyStylistRequest(question)).toBe('visual')
+    expect(shouldShowCurrentOutfits(question, 3)).toBe(true)
+    expect(shouldShowCurrentOutfits(question, 0)).toBe(false)
+    expect(shouldShowCurrentOutfits('Show me images of new outfits.', 3)).toBe(false)
   })
 })
 

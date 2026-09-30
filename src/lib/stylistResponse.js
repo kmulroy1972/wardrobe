@@ -146,8 +146,10 @@ export function collectRecentRecommendationUsage(messages = [], garments = [], a
 
   for (let index = messages.length - 1; index >= 0 && answersRead < answerLimit; index -= 1) {
     if (messages[index]?.role !== 'assistant') continue
+    const outfits = parseStylistOutfits(messages[index].text, garments)
+    if (outfits.length === 0) continue
     answersRead += 1
-    for (const outfit of parseStylistOutfits(messages[index].text, garments)) {
+    for (const outfit of outfits) {
       for (const { g } of outfit.items) {
         const prior = usage.get(g.id)
         usage.set(g.id, {
@@ -160,6 +162,17 @@ export function collectRecentRecommendationUsage(messages = [], garments = [], a
   }
 
   return [...usage.values()].sort((a, b) => b.count - a.count || String(a.id).localeCompare(String(b.id)))
+}
+
+export function stylistHistory(messages = []) {
+  const history = []
+  for (let index = 0; index < messages.length - 1; index += 1) {
+    const question = messages[index]
+    const answer = messages[index + 1]
+    if (question?.role !== 'user' || answer?.role !== 'assistant' || answer.kind === 'notice') continue
+    history.push({ role: 'user', content: question.text }, { role: 'assistant', content: answer.text })
+  }
+  return history
 }
 
 export function loadStylistConversation(storage, userId) {

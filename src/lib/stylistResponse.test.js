@@ -7,6 +7,7 @@ import {
   parseStylistOutfits,
   parseStylistResponse,
   saveStylistConversation,
+  stylistHistory,
 } from './stylistResponse'
 
 const garments = [
@@ -145,6 +146,15 @@ Outfit 2 — Tan/Blue
       { id: 'shirt-2', name: 'Blue and lavender tattersall performance dress shirt', count: 1 },
     ])
   })
+
+  it('does not let photo notices crowd recommendations out of the recent-use window', () => {
+    const messages = [
+      { role: 'assistant', text: 'Outfit 1 — First\n- Reda grey wool hopsack Bedford jacket\n- Light blue houndstooth dress shirt\n- Oat lightweight stretch chino' },
+      ...Array.from({ length: 5 }, () => ({ role: 'assistant', text: 'Your photos are below.', kind: 'notice' })),
+    ]
+
+    expect(collectRecentRecommendationUsage(messages, outfitGarments, 1).map(({ id }) => id)).toContain('shirt-1')
+  })
 })
 
 describe('buildStylistConversationOutfits', () => {
@@ -163,6 +173,19 @@ describe('buildStylistConversationOutfits', () => {
     expect(buildStylistConversationOutfits(messages, outfitGarments).map(({ name }) => name)).toEqual([
       'Gray dinner look',
       'Tan dinner look',
+    ])
+  })
+
+  it('keeps the current visual plan when the user asks to see its photos', () => {
+    const messages = [
+      { role: 'user', text: 'Give me a business casual outfit.' },
+      { role: 'assistant', text: first },
+      { role: 'user', text: 'Show me images of these outfits.', requestMode: 'visual' },
+      { role: 'assistant', text: 'The outfits are shown below.', kind: 'notice' },
+    ]
+
+    expect(buildStylistConversationOutfits(messages, outfitGarments).map(({ name }) => name)).toEqual([
+      'Gray dinner look',
     ])
   })
 
@@ -230,5 +253,22 @@ describe('Stylist conversation session storage', () => {
   it('ignores corrupt saved state', () => {
     const storage = { getItem: vi.fn().mockReturnValue('{not-json') }
     expect(loadStylistConversation(storage, 'user-1')).toEqual([])
+  })
+})
+
+describe('stylistHistory', () => {
+  it('keeps answered turns and omits local photo notices and failed turns', () => {
+    const messages = [
+      { role: 'user', text: 'Plan Friday.' },
+      { role: 'assistant', text: 'Friday outfit.' },
+      { role: 'user', text: 'Show me images of these outfits.' },
+      { role: 'assistant', text: 'Photos are below.', kind: 'notice' },
+      { role: 'user', text: 'Change the shirt.' },
+    ]
+
+    expect(stylistHistory(messages)).toEqual([
+      { role: 'user', content: 'Plan Friday.' },
+      { role: 'assistant', content: 'Friday outfit.' },
+    ])
   })
 })
